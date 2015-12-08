@@ -87,7 +87,8 @@ unsigned int HCE_dataLenght = 0x00;
 void help(int mode);
 int InitEnv();
 int LookForTag(char** args, int args_len, char* tag, char** data, int format);
-
+void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen);
+int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, unsigned int* outNDEFBufferLen);
 
 void onDataReceived(unsigned char *data, unsigned int data_length)
 {
@@ -613,8 +614,6 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 	unsigned int i = 0x00;
 	char* TextContent = NULL;
 	char* URLContent = NULL;
-	nfc_handover_select_t HandoverSelectContent;
-	nfc_handover_request_t HandoverRequestContent;
 	if(NULL != NDEFinfo)
 	{
 		ndefRawLen = NDEFinfo->current_ndef_length;
@@ -721,8 +720,7 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 	unsigned int i = 0x00;
 	char* TextContent = NULL;
 	char* URLContent = NULL;
-	nfc_handover_select_t HandoverSelectContent;
-	nfc_handover_request_t HandoverRequestContent;
+
 	printf("getPayload:\n");
 	if(NULL != NDEFinfo)
 	{
@@ -824,9 +822,33 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 	return TextContent;
 }
 
-void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
+void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
 {
-	int i;
+	int res = 0x00;
+	char  arg0[] = "--type=Text";
+    char  arg1[] = "-l";
+    char  arg2[] = "en";
+    char arg3[] = "-r";
+    char* arg4 = resp;
+    char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
+    int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
+	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
+
+	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
+	if(0x00 == res)
+	{
+		printf("Write Tag OK\n Read back data");
+		res = nfcTag_isNdef(TagInfo.handle, &NDEFinfo);
+		if(0x01 == res)
+		{
+			PrintfNDEFInfo(NDEFinfo);
+			PrintNDEFContent(&TagInfo, &NDEFinfo, NULL, 0x00);
+		}
+	}
+}
+
+void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta)
+{
 	char cid[9];
 	char dev;
 	char valid;
@@ -869,11 +891,13 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 	unsigned int NDEFMsgLen = 0x00;
 	if ((dev == '0') && (valid == '1'))
 	{
-		printf("subtracting 2.50\n");
-		p->balance -= FEE;
+		printf("subtracting %f\n", delta);
+		p->balance += delta;
 		float f = p->balance;
 		sprintf(balance, "%X", *((int*)&f) );
 		printf("New balances: %s\n%f\n", balance, p->balance);
+
+		//TODO: update timestamp
 
 		char resp[strlen(pl)];
 		strcpy(resp, pl);
@@ -889,29 +913,24 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 	}
 }
 
-void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
+void initcard(char* cid, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
-	int res = 0x00;
-	char  arg0[] = "--type=Text";
-    char  arg1[] = "-l";
-    char  arg2[] = "en";
-    char arg3[] = "-r";
-    char* arg4 = resp;
-    char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
-    int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
-	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
 
-	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
-	if(0x00 == res)
-	{
-		printf("Write Tag OK\n Read back data");
-		res = nfcTag_isNdef(TagInfo.handle, &NDEFinfo);
-		if(0x01 == res)
-		{
-			PrintfNDEFInfo(NDEFinfo);
-			PrintNDEFContent(&TagInfo, &NDEFinfo, NULL, 0x00);
-		}
-	}
+	printf("Initializing Card...\n\n");
+
+	unsigned char * NDEFMsg = NULL;
+	unsigned int NDEFMsgLen = 0x00;
+	char resp[PL_LEN];
+	strcpy(resp, cid);
+	char* initString = "0100000000201510102424240";
+	strcpy(resp+8, initString);
+	resp[PL_LEN-1] = '\0';
+
+	printf("New Payload:%s\n", resp);
+
+	writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+
+	printf("Writing finished.\n");
 }
 
 /*mode = 1 => poll mode = 2 => push mode = 3 => ndef write 4 => HCE*/
@@ -931,9 +950,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	/*Cmd Mifare Read 16 : 0x30U*/
 	unsigned char MifareReadCmd[2] = {0x30U,  /*block*/ 0x00};
 	unsigned char MifareReadResp[255];
-	
-	unsigned char HCEReponse[255];
-	short unsigned int HCEResponseLen = 0x00;
 	
 	nfc_tag_info_t TagInfo;
 	
@@ -1072,10 +1088,72 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					}
 					if(0x05 == mode)
 					{
+						//scanner on bus
 
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 
-						transaction(pl, TagInfo, NDEFinfo);
+						//TODO: encrypt/deencrypt
+
+						transaction(pl, TagInfo, NDEFinfo, -FEE);
+
+						//TODO: update database
+
+					}
+					if(0x06 == mode)
+					{
+						// scanner at kiosks
+
+						//TODO: IPC: wait for prompt from GUI to begin poll
+						//message of bytes, need to convert message to chars*
+
+						//command from GUI converted from bytes
+						//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
+						char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
+						char cmd = message[0];
+						char argu[9];
+						strncpy(argu, message+1, 8);
+						argu[8] = '\0';
+
+						if (cmd == '0')
+						{
+							//init card mode
+							if (NDEFinfo.current_ndef_length < 8) // if blank
+							{
+
+								initcard(argu, TagInfo, NDEFinfo);	
+							}
+							else
+							{
+								//don't overwrite
+								printf("Error: Card already initilized.\n" );
+								//give option to erase?
+							}
+
+						}
+						else if (cmd == '1')
+						{
+							//add (or subtract) balance
+
+							//if add balance mode
+
+							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
+
+							int num;
+							sscanf(argu, "%x", &num);
+							float credit = *((float*)&num);
+
+							transaction(pl, TagInfo, NDEFinfo, credit);
+							
+						}
+						else if (cmd == '2')
+						{
+							// blank card?
+						}
+						//else if etc....
+
+
+						
+						
 
 					}
 				}
@@ -1687,6 +1765,52 @@ void cmd_bus(int arg_len, char** arg)
 	printf("Leaving ...\n");
 }
 
+void cmd_kiosk(int arg_len, char** arg)
+{
+	int res = 0x00;
+	unsigned char * NDEFMsg = NULL;
+	unsigned int NDEFMsgLen = 0x00;
+	
+	printf("#########################################################################################\n");
+	printf("##                                     G16 Capstone                                    ##\n");
+	printf("#########################################################################################\n");
+	printf("##                                 Kiosk mode activated                                ##\n");
+	printf("#########################################################################################\n");
+	
+	InitEnv();
+	
+	if(0x00 == LookForTag(arg, arg_len, "-h", NULL, 0x00) || 0x00 == LookForTag(arg, arg_len, "--help", NULL, 0x01))
+	{
+		help(0x02);
+	}
+	else
+	{
+		res = InitMode(0x01, 0x01, 0x00);
+		
+		if(0x00 == res)
+		{
+			//res = BuildNDEFMessage(arg_len, arg, &NDEFMsg, &NDEFMsgLen);
+		}
+		
+		if(0x00 == res)
+		{
+			WaitDeviceArrival(0x06, NDEFMsg, NDEFMsgLen);
+		}
+		
+		if(NULL != NDEFMsg)
+		{
+			free(NDEFMsg);
+			NDEFMsg = NULL;
+			NDEFMsgLen = 0x00;
+		}
+		
+		res = DeinitPollMode();
+	}
+	
+	
+	printf("Leaving ...\n");
+}
+
 
 void* ExitThread(void* pContext)
 {
@@ -1815,8 +1939,12 @@ int CleanEnv()
 	}*/
 	else if(strcmp(argv[1],"bus") == 0)
 	{
-		printf("argc: %i\n argv[2]: %s\n", argc, argv[2]);
 		cmd_bus(argc - 2, &argv[2]);
+	}
+	else if(strcmp(argv[1],"kiosk") == 0)
+	{
+
+		cmd_kiosk(argc - 2, &argv[2]);
 	}
 	else
 	{
