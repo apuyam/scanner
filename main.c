@@ -23,6 +23,11 @@
 #include "linux_nfc_api.h"
 #include "tools.h"
 #include "payload.h"
+#include "tcp.h"
+#include "functions.h"
+//#include "wiringPi.h"
+
+#define KEY "ABCD 1234 XWYZ 4567"
 
 typedef enum eDevState
 {
@@ -590,22 +595,6 @@ void PrintfNDEFInfo(ndef_info_t pNDEFinfo)
 	}
 }
 
-
-void open_uri (const char* uri)
-{
-	char *temp = malloc(strlen("xdg-open ") + strlen(uri) + 1);
-	if (temp != NULL)
-	{
-		strcpy(temp, "xdg-open ");
-		strcat(temp, uri);
-		strcat(temp, "&");
-		printf("\t\t- Opening URI in web browser ...\n");
-		system(temp);
-		free(temp);
-	}
-}
-
-
 void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen)
 {
 	unsigned char* NDEFContent = NULL;
@@ -666,29 +655,6 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 					TextContent = NULL;
 				}
 			} break;
-			case NDEF_FRIENDLY_TYPE_URL:
-			{
-				/*NOTE : + 27 = Max prefix lenght*/
-				URLContent = malloc(res * sizeof(unsigned char) + 27 );
-				memset(URLContent, 0x00, res * sizeof(unsigned char) + 27);
-				res = ndef_readUrl(NDEFContent, res, URLContent, res + 27);
-				if(0x00 == res)
-				{
-					printf("				Type : 				'URI'\n");
-					printf("				URI : 				'%s'\n\n", URLContent);
-					/*NOTE: open url in browser*/
-					/*open_uri(URLContent);*/
-				}
-				else
-				{
-					printf("				Read NDEF URL Error\n");
-				}
-				if(NULL != URLContent)
-				{
-					free(URLContent);
-					URLContent = NULL;
-				}
-			} break;
 			default:
 			{
 			} break;
@@ -702,7 +668,16 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 				printf("\n\t\t");
 			}
 		}
-		printf("\n\n");
+		printf("\nRaw Test\n");
+
+		unsigned char* rawtest[ndefRawLen];
+
+		for (i = 0x00; i < ndefRawLen; i++)
+		{
+			rawtest[i] = NDEFContent[i];
+
+			printf("%02X ", rawtest[i]);
+		}
 	}
 	
 	if(NULL != NDEFContent)
@@ -811,7 +786,16 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 				printf("\n\t\t");
 			}
 		}
-		printf("\n\n");
+		printf("\nRaw Test\n");
+
+		unsigned char* rawtest[ndefRawLen];
+
+		for (i = 0x00; i < ndefRawLen; i++)
+		{
+			rawtest[i] = NDEFContent[i];
+
+			printf("%02X ", rawtest[i]);
+		}
 	}
 	
 	if(NULL != NDEFContent)
@@ -824,6 +808,7 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 
 void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
 {
+	int i;
 	int res = 0x00;
 	char  arg0[] = "--type=Text";
     char  arg1[] = "-l";
@@ -832,9 +817,23 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
     char* arg4 = resp;
     char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
     int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
+
+    printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
+	for (i=0; i<NDEFMsgLen; i++)
+	{
+		printf("%02X ", NDEFMsg[i]);
+	}
+
 	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
 
+	
+	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
+	for (i=0; i<NDEFMsgLen; i++)
+	{
+		printf("%02X ", NDEFMsg[i]);
+	}
 	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
+	printf("\n size %d\n", NDEFMsgLen);
 	if(0x00 == res)
 	{
 		printf("Write Tag OK\n Read back data");
@@ -905,11 +904,39 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		resp[strlen(pl)] = '\0';
 		printf("New Payload:%s\n", resp);
 
+		char testen[strlen(resp)];
+		strcpy(testen, resp);
+		testen[strlen(testen)] = '\0';
+
+		//printf("Encrypted: %s\n", encrypt(testen, KEY, PL_LEN));
+
 		printf("Writing new balance...\n");
 
 		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
+		printf("Updating database..");
+
+		char msgBuf[BUFSIZE];
+		int port = 5555;
+		//char hostname[] = "169.254.85.87";
+		//char hostname[] = "192.169.0.27";
+		char hostname[] = "192.168.100.117";
+
+
+		//should send FEE instead of p->balance
+		char* msgParam = malloc(BUFSIZE);
+		strcpy(msgBuf, createBalanceUpdate(p->cid, -FEE, msgParam));
+		
+		sendMessageToServer(hostname, port, msgBuf);
+		free(msgParam);
+
 		printf("Writing finished.\n");
+		//TODO: Green LED
+	}
+	else
+	{
+		printf("Invalid\n");
+		//TODO: Red LED
 	}
 }
 
@@ -922,15 +949,32 @@ void initcard(char* cid, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 	unsigned int NDEFMsgLen = 0x00;
 	char resp[PL_LEN];
 	strcpy(resp, cid);
-	char* initString = "0100000000201510102424240";
+	char* initString = "01432a000020151010242424";
+	//ffffffff01432a000020151010242424
 	strcpy(resp+8, initString);
 	resp[PL_LEN-1] = '\0';
 
-	printf("New Payload:%s\n", resp);
+	// encrypt(resp, KEY, PL_LEN);
+	// //printf("Encrypted payload: %s\n", resp);
+	// printf("New Payload:%s\n", resp);
+	// int i;
+	// for (i=0; i<sizeof(resp); i++)
+	// {
+	// 	printf("%02X ", resp[i]);
+	// }
+
+	// encrypt(resp, KEY, PL_LEN);
+
+	// printf("New New Payload:%s\n", resp);
+	
+	// for (i=0; i<sizeof(resp); i++)
+	// {
+	// 	printf("%02X ", resp[i]);
+	// }
 
 	writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
-	printf("Writing finished.\n");
+	printf("\nWriting finished.\n");
 }
 
 /*mode = 1 => poll mode = 2 => push mode = 3 => ndef write 4 => HCE*/
@@ -1090,13 +1134,21 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						//scanner on bus
 
+
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 
 						//TODO: encrypt/deencrypt
 
-						transaction(pl, TagInfo, NDEFinfo, -FEE);
+						//encrypt(pl, KEY, PL_LEN);
 
-						//TODO: update database
+						printf("%s\n", pl);
+
+						transaction(pl, TagInfo, NDEFinfo, -FEE);
+						// for(k = 0; k<2; k++)
+						// {
+						// 	digitalWrite(28, HIGH);delay(500);
+						// }
+
 
 					}
 					if(0x06 == mode)
@@ -1106,9 +1158,18 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						//TODO: IPC: wait for prompt from GUI to begin poll
 						//message of bytes, need to convert message to chars*
 
+
+						//char message[BUFSIZE];
+
 						//command from GUI converted from bytes
-						//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
-						char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
+						char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
+						//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
+						// int port = 5555;
+						// char hostname[] = "169.254.85.87";
+
+						// blocks while waiting for GUI
+						// readMessageFromServer(hostname, port, message);
+
 						char cmd = message[0];
 						char argu[9];
 						strncpy(argu, message+1, 8);
@@ -1148,12 +1209,12 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						else if (cmd == '2')
 						{
 							// blank card?
+							unsigned char * NDEFMsg = NULL;
+							unsigned int NDEFMsgLen = 0x00;
+							printf("Blanking card...\n");
+							writeMessage("", TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 						}
-						//else if etc....
-
-
-						
-						
+						//else if etc....		
 
 					}
 				}
@@ -1393,6 +1454,7 @@ int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, uns
 			}
 			if(0x00 == res)
 			{
+				//TODO: change strlen
 				*outNDEFBufferLen = strlen(text) + strlen(lang) + 30; /*TODO : replace 30 by TEXT NDEF message header*/
 				*outNDEFBuffer = (unsigned char*) malloc(*outNDEFBufferLen * sizeof(unsigned char));
 				res = ndef_createText(lang, text, *outNDEFBuffer, *outNDEFBufferLen);
@@ -1536,6 +1598,17 @@ int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, uns
 	return res;
 }
 
+// if(0xFF == LookForTag(arg, arg_len, "-r", &text, 0x00) && 0xFF == LookForTag(arg, arg_len, "--rep", &text, 0x01))
+// 			{
+// 				printf("Representation missing (-r)\n");
+// 				res = 0xFF;
+// 			}
+			
+// 			if(0xFF == LookForTag(arg, arg_len, "-l", &lang, 0x00) && 0xFF == LookForTag(arg, arg_len, "--lang", &lang, 0x01))
+// 			{
+// 				printf("Language missing (-l)\n");
+// 				res = 0xFF;
+// 			}
 
 /*if data = NULL this tag is not followed by dataStr : for example -h --help
 if format = 0 tag format -t "text" if format=1 tag format : --type=text*/
@@ -1605,6 +1678,7 @@ void cmd_poll(int arg_len, char** arg)
 	printf("#########################################################################################\n");
 	
 	InitEnv();
+	
 
 	if(0x00 == LookForTag(arg, arg_len, "-h", NULL, 0x00) || 0x00 == LookForTag(arg, arg_len, "--help", NULL, 0x01))
 	{
@@ -1916,6 +1990,11 @@ int CleanEnv()
  
  int main(int argc, char ** argv)
  {
+ // 	wiringPiSetup();
+
+	// pinMode(28, OUTPUT);
+	// digitalWrite(28, LOW);
+
 	if (argc<2)
 	{
 		printf("Missing argument\n");
@@ -1933,10 +2012,6 @@ int CleanEnv()
 	{
 		cmd_push(argc - 2, &argv[2]);
 	}
-	/*else if(strcmp(argv[1],"share") == 0)
-	{
-		cmd_share(argc - 2, &argv[2]);
-	}*/
 	else if(strcmp(argv[1],"bus") == 0)
 	{
 		cmd_bus(argc - 2, &argv[2]);
