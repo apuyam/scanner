@@ -1,0 +1,1 @@
+char* encrypt(char* input, char* key, int inputlen);
