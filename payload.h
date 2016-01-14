@@ -1,4 +1,4 @@
-#define FEE 2.50
+#define FEE -2.50
 #define PL_LEN 33
 
 struct payload_struct {
