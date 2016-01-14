@@ -287,7 +287,7 @@ void onDeviceDeparture (void)
 
 void onMessageReceived(unsigned char *message, unsigned int length)
 {
-	unsigned int i = 0x00;
+	//unsigned int i = 0x00;
 	printf("\n\t\tNDEF Message Received : \n");
 	PrintNDEFContent(NULL, NULL, message, length);
 }
@@ -602,7 +602,6 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 	unsigned int res = 0x00;
 	unsigned int i = 0x00;
 	char* TextContent = NULL;
-	char* URLContent = NULL;
 	if(NULL != NDEFinfo)
 	{
 		ndefRawLen = NDEFinfo->current_ndef_length;
@@ -668,16 +667,16 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 				printf("\n\t\t");
 			}
 		}
-		printf("\nRaw Test\n");
+		// printf("\nRaw Test\n");
 
-		unsigned char* rawtest[ndefRawLen];
+		// unsigned char* rawtest[ndefRawLen];
 
-		for (i = 0x00; i < ndefRawLen; i++)
-		{
-			rawtest[i] = NDEFContent[i];
+		// for (i = 0x00; i < ndefRawLen; i++)
+		// {
+		// 	rawtest[i] = NDEFContent[i];
 
-			printf("%02X ", rawtest[i]);
-		}
+		// 	printf("%02X ", rawtest[i]);
+		// }
 	}
 	
 	if(NULL != NDEFContent)
@@ -687,6 +686,7 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 	}
 }
 
+/* based on PrintNDEFContent, reads card payload as char* and returns it*/
 char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen)
 {
 	unsigned char* NDEFContent = NULL;
@@ -694,7 +694,6 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 	unsigned int res = 0x00;
 	unsigned int i = 0x00;
 	char* TextContent = NULL;
-	char* URLContent = NULL;
 
 	printf("getPayload:\n");
 	if(NULL != NDEFinfo)
@@ -750,29 +749,6 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 					TextContent = NULL;
 				}
 			} break;
-			case NDEF_FRIENDLY_TYPE_URL:
-			{
-				/*NOTE : + 27 = Max prefix lenght*/
-				URLContent = malloc(res * sizeof(unsigned char) + 27 );
-				memset(URLContent, 0x00, res * sizeof(unsigned char) + 27);
-				res = ndef_readUrl(NDEFContent, res, URLContent, res + 27);
-				if(0x00 == res)
-				{
-					printf("				Type : 				'URI'\n");
-					printf("				URI : 				'%s'\n\n", URLContent);
-					/*NOTE: open url in browser*/
-					/*open_uri(URLContent);*/
-				}
-				else
-				{
-					printf("				Read NDEF URL Error\n");
-				}
-				if(NULL != URLContent)
-				{
-					free(URLContent);
-					URLContent = NULL;
-				}
-			} break;
 			default:
 			{
 			} break;
@@ -786,16 +762,16 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 				printf("\n\t\t");
 			}
 		}
-		printf("\nRaw Test\n");
+		// printf("\nRaw Test\n");
 
-		unsigned char* rawtest[ndefRawLen];
+		// unsigned char* rawtest[ndefRawLen];
 
-		for (i = 0x00; i < ndefRawLen; i++)
-		{
-			rawtest[i] = NDEFContent[i];
+		// for (i = 0x00; i < ndefRawLen; i++)
+		// {
+		// 	rawtest[i] = NDEFContent[i];
 
-			printf("%02X ", rawtest[i]);
-		}
+		// 	printf("%02X ", rawtest[i]);
+		// }
 	}
 	
 	if(NULL != NDEFContent)
@@ -806,6 +782,7 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 	return TextContent;
 }
 
+/* writes message resp to card */
 void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
 {
 	int i;
@@ -845,7 +822,8 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 		}
 	}
 }
-
+/* takes payload string pl, extracts info into payload struct, subtracts diff from balance,
+writes new paylod with new balance to card, sends update to databse*/
 void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta)
 {
 	char cid[9];
@@ -917,15 +895,11 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		printf("Updating database..");
 
 		char msgBuf[BUFSIZE];
-		int port = 5555;
-		//char hostname[] = "169.254.85.87";
-		//char hostname[] = "192.169.0.27";
-		char hostname[] = "192.168.100.117";
+		int port = DBPORT;
+		char hostname[] = HOSTNAME;
 
-
-		//should send FEE instead of p->balance
 		char* msgParam = malloc(BUFSIZE);
-		strcpy(msgBuf, createBalanceUpdate(p->cid, -FEE, msgParam));
+		strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
 		
 		sendMessageToServer(hostname, port, msgBuf);
 		free(msgParam);
@@ -940,6 +914,8 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	}
 }
 
+/*right now will only init cards with a blank ("") payload and assumes
+$100 initial balance*/
 void initcard(char* cid, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
 
@@ -1000,9 +976,49 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	MifareAuthCmd[1] = block;
 	memcpy(&MifareAuthCmd[6], key, 6);
 	MifareReadCmd[1] = block;
-	
+
+	/* vars for kiosk mode (0x06)*/
+	int kioskWait = 1;
+	char cmd;
+	char argu[9];
+
+	//UNCOMMENT message[BUFSIZE] AND COMMENT OUT message = "etc...." IF TESTING TCP
+	//char message[BUFSIZE];
+	//command from GUI converted from bytes
+	//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
+	char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
 	do
 	{
+		if (0x06 == mode)
+		{
+			if (kioskWait)
+			{
+				//KIOSK SCANNER MODE
+				//block for IPC
+				printf("Waiting...\n");
+				//TODO: IPC: wait for prompt from GUI to begin poll
+				//message of bytes, need to convert message to chars*
+
+
+				
+				// int port = 5555;
+				// char hostname[] = "169.254.85.87";
+				//COMMENT OUT SLEEP IF TESING TCP
+
+				// blocks while waiting for GUI
+				// readMessageFromServer(hostname, port, message);
+
+				cmd = message[0];
+				strncpy(argu, message+1, 8);
+				argu[8] = '\0';
+
+				sleep(3);
+				printf("Resuming...\n");
+				kioskWait = 0;
+			}
+			
+		}
+	
 		framework_LockMutex(g_devLock);
 		if(eDevState_EXIT == g_DevState)
 		{
@@ -1132,7 +1148,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					}
 					if(0x05 == mode)
 					{
-						//scanner on bus
+						//BUS SCANNER MODE
 
 
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
@@ -1143,7 +1159,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 						printf("%s\n", pl);
 
-						transaction(pl, TagInfo, NDEFinfo, -FEE);
+						transaction(pl, TagInfo, NDEFinfo, FEE);
 						// for(k = 0; k<2; k++)
 						// {
 						// 	digitalWrite(28, HIGH);delay(500);
@@ -1153,27 +1169,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					}
 					if(0x06 == mode)
 					{
-						// scanner at kiosks
-
-						//TODO: IPC: wait for prompt from GUI to begin poll
-						//message of bytes, need to convert message to chars*
-
-
-						//char message[BUFSIZE];
-
-						//command from GUI converted from bytes
-						char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
-						//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
-						// int port = 5555;
-						// char hostname[] = "169.254.85.87";
-
-						// blocks while waiting for GUI
-						// readMessageFromServer(hostname, port, message);
-
-						char cmd = message[0];
-						char argu[9];
-						strncpy(argu, message+1, 8);
-						argu[8] = '\0';
+						//KIOSK SCANNER MODE
 
 						if (cmd == '0')
 						{
@@ -1215,7 +1211,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							writeMessage("", TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 						}
 						//else if etc....		
-
+						kioskWait = 1;
 					}
 				}
 				else
