@@ -795,22 +795,22 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
     char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
     int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
 
-   // printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
-//	for (i=0; i<NDEFMsgLen; i++)
-//	{
-//		printf("%02X ", NDEFMsg[i]);
-//	}
+    printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
+	for (i=0; i<NDEFMsgLen; i++)
+	{
+		printf("%02X ", NDEFMsg[i]);
+	}
 
 	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
 
 	
-//	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
-//	for (i=0; i<NDEFMsgLen; i++)
-//	{
-//		printf("%02X ", NDEFMsg[i]);
-//	}
+	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
+	for (i=0; i<NDEFMsgLen; i++)
+	{
+		printf("%02X ", NDEFMsg[i]);
+	}
 	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
-//	printf("\n size %d\n", NDEFMsgLen);
+	printf("\n size %d\n", NDEFMsgLen);
 	if(0x00 == res)
 	{
 		printf("Write Tag OK\n Read back data");
@@ -882,17 +882,15 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		resp[strlen(pl)] = '\0';
 		printf("New Payload:%s\n", resp);
 
-		//char testen[strlen(resp)];
-		//strcpy(testen, resp);
-		//testen[strlen(testen)] = '\0';
+		char testen[strlen(resp)];
+		strcpy(testen, resp);
+		testen[strlen(testen)] = '\0';
 
 		//printf("Encrypted: %s\n", encrypt(testen, KEY, PL_LEN));
 
 		printf("Writing new balance...\n");
-
-		//char testtest[] = "test";
-		printf("RESP:%s \n", resp);
-		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+		char* testtest = "TestTest";
+		writeMessage(testtest, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
 		printf("Updating database..");
 
@@ -985,9 +983,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	char argu[9];
 
 	//UNCOMMENT message[BUFSIZE] AND COMMENT OUT message = "etc...." IF TESTING TCP
-	//char message[BUFSIZE];
+	char message[BUFSIZE];
 	//command from GUI converted from bytes
-	char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
+	//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
 	//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
 	do
 	{
@@ -1003,18 +1001,23 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 
 				
-				// int port = 5555;
-				// char hostname[] = "169.254.85.87";
+				int port = GUIPORT;
+				char hostname[] = "192.168.100.117";
 				//COMMENT OUT SLEEP IF TESING TCP
 
 				// blocks while waiting for GUI
+
+				// don't use readMessageFromServer
 				// readMessageFromServer(hostname, port, message);
+				
+
+				receiveGUIMessage(port, message);
 
 				cmd = message[0];
 				strncpy(argu, message+1, 8);
 				argu[8] = '\0';
 
-				sleep(3);
+				//sleep(3);
 				printf("Resuming...\n");
 				kioskWait = 0;
 			}
