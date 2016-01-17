@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <unistd.h>
 #include "linux_nfc_api.h"
 #include "tools.h"
 #include "payload.h"
@@ -785,7 +786,6 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 /* writes message resp to card */
 void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
 {
-	int i;
 	int res = 0x00;
 	char  arg0[] = "--type=Text";
     char  arg1[] = "-l";
@@ -795,22 +795,22 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
     char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
     int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
 
-    printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
-	for (i=0; i<NDEFMsgLen; i++)
-	{
-		printf("%02X ", NDEFMsg[i]);
-	}
+   // printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
+//	for (i=0; i<NDEFMsgLen; i++)
+//	{
+//		printf("%02X ", NDEFMsg[i]);
+//	}
 
 	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
 
 	
-	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
-	for (i=0; i<NDEFMsgLen; i++)
-	{
-		printf("%02X ", NDEFMsg[i]);
-	}
+//	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
+//	for (i=0; i<NDEFMsgLen; i++)
+//	{
+//		printf("%02X ", NDEFMsg[i]);
+//	}
 	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
-	printf("\n size %d\n", NDEFMsgLen);
+//	printf("\n size %d\n", NDEFMsgLen);
 	if(0x00 == res)
 	{
 		printf("Write Tag OK\n Read back data");
@@ -882,15 +882,17 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		resp[strlen(pl)] = '\0';
 		printf("New Payload:%s\n", resp);
 
-		char testen[strlen(resp)];
-		strcpy(testen, resp);
-		testen[strlen(testen)] = '\0';
+		//char testen[strlen(resp)];
+		//strcpy(testen, resp);
+		//testen[strlen(testen)] = '\0';
 
 		//printf("Encrypted: %s\n", encrypt(testen, KEY, PL_LEN));
 
 		printf("Writing new balance...\n");
-		char* testtest = "TestTest";
-		writeMessage(testtest, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+
+		//char testtest[] = "test";
+		printf("RESP:%s \n", resp);
+		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
 		printf("Updating database..");
 
@@ -914,9 +916,8 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	}
 }
 
-/*right now will only init cards with a blank ("") payload and assumes
-$100 initial balance*/
-void initcard(char* cid, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
+/*init card with cid and balance*/
+void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
 
 	printf("Initializing Card...\n\n");
@@ -925,7 +926,8 @@ void initcard(char* cid, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 	unsigned int NDEFMsgLen = 0x00;
 	char resp[PL_LEN];
 	strcpy(resp, cid);
-	char* initString = "01432a000020151010242424";
+	char initString[] = "01432a000020151010242424";
+	strncpy(initString+2, balance, 8);
 	//ffffffff01432a000020151010242424
 	strcpy(resp+8, initString);
 	resp[PL_LEN-1] = '\0';
@@ -958,68 +960,99 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 {
 	int res = 0x00;
 	unsigned int i = 0x00;
-	int block = 0x15;
-	unsigned char key[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+	//int block = 0x15;
+	//unsigned char key[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	ndef_info_t NDEFinfo;
 	eDevType DevTypeBck = eDevType_NONE;
 	/*Cmd Mifare Auth Key A : 0x60U*/
-	unsigned char MifareAuthCmd[12] = {0x60U, 0x00 /*block*/, 0x02, 0x02, 0x02, 0x02, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/ , 0x00 /*key*/, 0x00 /*key*/};
-	unsigned char MifareAuthResp[255];
-	/*unsigned char MifareAuthRespOK[2] = {0x40, 0x00};
-	unsigned char MifareAuthRespKO[2] = {0x40, 0x03};*/
-	/*Cmd Mifare Read 16 : 0x30U*/
-	unsigned char MifareReadCmd[2] = {0x30U,  /*block*/ 0x00};
-	unsigned char MifareReadResp[255];
+	// unsigned char MifareAuthCmd[12] = {0x60U, 0x00 /*block*/, 0x02, 0x02, 0x02, 0x02, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/ , 0x00 /*key*/, 0x00 /*key*/};
+	// unsigned char MifareAuthResp[255];
+	// unsigned char MifareAuthRespOK[2] = {0x40, 0x00};
+	// unsigned char MifareAuthRespKO[2] = {0x40, 0x03};
+	// /*Cmd Mifare Read 16 : 0x30U*/
+	// unsigned char MifareReadCmd[2] = {0x30U,  /*block*/ 0x00};
+	// unsigned char MifareReadResp[255];
 	
 	nfc_tag_info_t TagInfo;
 	
-	MifareAuthCmd[1] = block;
-	memcpy(&MifareAuthCmd[6], key, 6);
-	MifareReadCmd[1] = block;
+	// MifareAuthCmd[1] = block;
+	// memcpy(&MifareAuthCmd[6], key, 6);
+	// MifareReadCmd[1] = block;
 
 	/* vars for kiosk mode (0x06)*/
+	int n;
 	int kioskWait = 1;
 	char cmd;
-	char argu[9];
-
+	char argu[BUFSIZE];
+	char argb[BUFSIZE];
+	int serverfd;
+	int clientfd;
+	int port = 5556;
+	int connected = 0;
 	//UNCOMMENT message[BUFSIZE] AND COMMENT OUT message = "etc...." IF TESTING TCP
 	char message[BUFSIZE];
 	//command from GUI converted from bytes
 	//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
 	//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
+	//char* message = "12.50";
+	//char* message = "02147483647";
+	if (0x06 == mode)
+	{
+		//initialize server
+		serverfd = initServer(serverfd, port);
+	}
+
+
 	do
 	{
 		if (0x06 == mode)
 		{
-			if (kioskWait)
+			while (kioskWait)
 			{
 				//KIOSK SCANNER MODE
 				//block for IPC
 				printf("Waiting...\n");
 				//TODO: IPC: wait for prompt from GUI to begin poll
 				//message of bytes, need to convert message to chars*
-
+				if (!connected)
+			    {
+			      clientfd = acceptClient(clientfd, serverfd, message);
+			      connected = 1;
+			    }
+			    
+			    printf("Reading...\n");
+			    bzero(message, BUFSIZE);
+			    n = read(clientfd, message, BUFSIZE);
+			    if (n <= 0){ 
+			      close(clientfd);
+			      connected = 0;
+			      printf("Disconnected from client.\n");
+			    }//error("ERROR reading from socket");
+			    printf("server received %d bytes: %s", n, message);
 
 				
-				int port = GUIPORT;
-				char hostname[] = "192.168.100.117";
+				//char hostname[] = "169.254.85.87";
+
 				//COMMENT OUT SLEEP IF TESING TCP
 
 				// blocks while waiting for GUI
-
-				// don't use readMessageFromServer
 				// readMessageFromServer(hostname, port, message);
+			    if (connected)
+			    {
+			    	cmd = message[0];
+					strcpy(argu, message+1);
+					argu[strlen(argu)] = '\0';
+					printf("argu: %s\n", argu);
+					if(cmd == '2')
+					{
+						strcpy(argb, message+11);
+						argb[strlen(argb)] = '\0';
+					}
+					//sleep(3);
+					printf("Resuming...\n");
+					kioskWait = 0;
+			    }
 				
-
-				receiveGUIMessage(port, message);
-
-				cmd = message[0];
-				strncpy(argu, message+1, 8);
-				argu[8] = '\0';
-
-				//sleep(3);
-				printf("Resuming...\n");
-				kioskWait = 0;
 			}
 			
 		}
@@ -1172,17 +1205,117 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 
 					}
-					if(0x06 == mode)
+					if(0x06 == mode && connected)
 					{
 						//KIOSK SCANNER MODE
 
+						// if (cmd == '0')
+						// {
+						// 	//init card mode
+						// 	if (NDEFinfo.current_ndef_length < 8) // if blank
+						// 	{
+
+						// 		int cid;
+						// 		strToInt(argu, &cid);
+						// 		char cidhex[BUFSIZE];
+						// 		intToHexStr(cid, cidhex);
+						// 		initcard(cidhex, TagInfo, NDEFinfo);	
+						// 	}
+						// 	else
+						// 	{
+						// 		//don't overwrite
+						// 		printf("Error: Card already initilized.\n" );
+						// 		//give option to erase?
+						// 	}
+
+						// }
+						// else if (cmd == '1')
+						// {
+						// 	//add (or subtract) balance
+
+						// 	//if add balance mode
+
+						// 	char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
+
+						// 	float credit;
+						// 	strToFloat(argu, &credit);
+
+						// 	transaction(pl, TagInfo, NDEFinfo, credit);
+							
+						// }
+						// else if (cmd == '2')
+						// {
+						// 	// blank card?
+						// 	unsigned char * NDEFMsg = NULL;
+						// 	unsigned int NDEFMsgLen = 0x00;
+						// 	printf("Blanking card...\n");
+						// 	writeMessage("", TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+						// }
+
 						if (cmd == '0')
 						{
-							//init card mode
+							//blank card
+							printf("Blanking card...\n");
+							unsigned char * NDEFMsg = NULL;
+							unsigned int NDEFMsgLen = 0x00;
+							writeMessage(FORMAT_BLANK, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+							n = write(clientfd, "ack0", strlen("ack0"));
+    							if (n < 0) 
+      								error("ERROR writing to socket");
+						}
+						else if (cmd == '1')
+						{
+							//Format check
+							printf("Checking format...\n");
+							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
+							if (strcmp(pl, FORMAT_BLANK) == 0)
+							{
+								printf("Verified blank card...\n");
+								//send "12"
+								n = write(clientfd, "ack12", strlen("ack12"));
+    							if (n < 0) 
+      								error("ERROR writing to socket");
+							}
+							else if (0)
+							{
+								// if properly formatted
+							}
+							else
+							{
+								// incorrectly formatted
+								printf("Incorrectly formatted card...\n");	
+								n = write(clientfd, "ack11", strlen("ack11"));
+    							if (n < 0) 
+      								error("ERROR writing to socket");
+								
+							}
+						}
+						else if (cmd == '2')
+						{
 							if (NDEFinfo.current_ndef_length < 8) // if blank
 							{
+								printf("Initializing card...");
+								char argcid[10];
+								strncpy(argcid, argu, 10);
+								int cid;
+								strToInt(argcid, &cid);
+								printf("CIDINT: %d\n", cid);
+								char cidhex[BUFSIZE];
+								intToHexStr(cid, cidhex);
+								printf("HEXSTR: %s\n", cidhex);
+								   
+								float balance;
+								strToFloat(argb, &balance);
+								printf("BALANCE: %f\n", balance);
 
-								initcard(argu, TagInfo, NDEFinfo);	
+								char hexbal[9];
+								floatToStr(balance, hexbal);
+								hexbal[8] = '\0';
+
+								initcard(cidhex, hexbal, TagInfo, NDEFinfo);
+								n = write(clientfd, "ack2", strlen("ack2"));
+    							if (n < 0) 
+      								error("ERROR writing to socket");	
 							}
 							else
 							{
@@ -1190,30 +1323,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								printf("Error: Card already initilized.\n" );
 								//give option to erase?
 							}
-
 						}
-						else if (cmd == '1')
+						else if (cmd == '3')
 						{
-							//add (or subtract) balance
-
-							//if add balance mode
-
+							printf("Adding balance to card...\n");
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
-
-							int num;
-							sscanf(argu, "%x", &num);
-							float credit = *((float*)&num);
-
+							float credit;
+							strToFloat(argu, &credit);
 							transaction(pl, TagInfo, NDEFinfo, credit);
-							
-						}
-						else if (cmd == '2')
-						{
-							// blank card?
-							unsigned char * NDEFMsg = NULL;
-							unsigned int NDEFMsgLen = 0x00;
-							printf("Blanking card...\n");
-							writeMessage("", TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+
+							n = write(clientfd, "ack3", strlen("ack3"));
+    							if (n < 0) 
+      								error("ERROR writing to socket");	
+
 						}
 						//else if etc....		
 						kioskWait = 1;
@@ -1221,44 +1343,31 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 				}
 				else
 				{
+
+					//HCE SCANNER
 					printf("\t\tNDEF Content : NO\n");
 					
-					if(TARGET_TYPE_MIFARE_CLASSIC == TagInfo.technology)
-					{
-						memset(MifareAuthResp, 0x00, 255);
-						memset(MifareReadResp, 0x00, 255);
+					unsigned char SelectAIDCommand[10] = {0x00, 0xA4, 0x04, 0x00, 0x05, 0x01, 0x23, 0x45, 0x67, 0x89};
+					unsigned char SelectAIDResponse[255];
 
-						res = nfcTag_transceive(TagInfo.handle, MifareAuthCmd, 12, MifareAuthResp, 255, 500);
-						if(0x00 == res)
-						{
-							printf("\n\t\tRAW Tag transceive failed\n");
-						}
-						else
-						{
-							printf("\n\t\tMifare Authenticate command sent\n\t\tResponse : \n\t\t");
-							for(i = 0x00; i < (unsigned int) res; i++)
-							{
-								printf("%02X ", MifareAuthResp[i]);
-							}
-							printf("\n");
-							
-							res = nfcTag_transceive(TagInfo.handle, MifareReadCmd, 2, MifareReadResp, 255, 500);
-							if(0x00 == res)
-							{
-								printf("\n\t\tRAW Tag transceive failed\n");
-							}
-							else
-							{
-								printf("\n\t\tMifare Read command sent\n\t\tResponse : \n\t\t");
-								for(i = 0x00; i < (unsigned int)res; i++)
-								{
-									printf("%02X ", MifareReadResp[i]);
-								}
-								printf("\n\n");
-							}
-						}
+					memset(SelectAIDResponse, 0x00, 255);
+
+					memcpy(&TagInfo, &g_TagInfo, sizeof(nfc_tag_info_t));
+					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
+					if(0x00 == res)
+					{
+					printf("\n\t\tRAW APDU transceive failed\n");
 					}
-					
+					else
+					{
+					printf("\n\t\tAPDU Select AID command sent\n\t\tResponse : \n\t\t");
+					for(i = 0x00; i < (unsigned int)res; i++)
+						{	
+							printf("%02X ", SelectAIDResponse[i]);
+						}
+						printf("\n\n");
+					}
+					//TODO: Read SelectAIDResponse and convert to payload.					
 				}
  				framework_LockMutex(g_devLock);
 			}

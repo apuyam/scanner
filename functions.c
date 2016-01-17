@@ -13,3 +13,42 @@ char* encrypt(char* input, char* key, int inputlen)
     }
     return input;
 }
+
+float strToFloat(char* str, float* f)
+{
+    *f = strtof(str, NULL);
+    
+    return *f;
+}
+
+float hexStrToFloat(char* str, float* f)
+{
+    int num;
+    sscanf(str, "%x", &num);
+    *f = *((float*)&num);
+    
+    return *f;
+}
+
+char* floatToStr(float f, char* str)
+{
+    sprintf(str, "%08X", *((int*)&f) );
+    
+    return str;
+}
+
+int strToInt(char* str, int* i)
+{
+    
+    *i = (int)strtol(str, NULL, 10);
+    
+    return *i;
+}
+
+char* intToHexStr(int i, char* str)
+{
+    sprintf(str, "%08X", i);
+    str[strlen(str)] = '\0';
+
+    return str;
+}
