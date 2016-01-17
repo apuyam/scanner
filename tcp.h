@@ -4,9 +4,16 @@
 #define DBPORT 5555
 #define GUIPORT 5556
 #define BUFSIZE 64
+#define FORMAT_BLANK ""
 #define LOGIN "scanner Capstone2015Scanner"
 
 void error(char *msg);
+
+/*KIOSK MODE: create server socket at parentfd*/
+int initServer(int parentfd, int portno);
+
+/*KIOSK MODE: block while waiting for a client connection*/
+int acceptClient(int childfd, int parentfd, char* buf);
 
 /* connect to hostname thru port, send buf, disconnect. */
 void sendMessageToServer(char* hostname, int port, char* buf);
@@ -35,3 +42,4 @@ char* readMessageFromServer(char* hostname, int port, char* buf);
 
 /* create server socket at port, disconnects after receiving 1 message*/
 char* receiveGUIMessage(int port, char* buf);
+
