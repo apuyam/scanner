@@ -1011,7 +1011,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			{
 				//KIOSK SCANNER MODE
 				//block for IPC
-				printf("Waiting...\n");
+				printf("Waiting for client...\n");
 				//TODO: IPC: wait for prompt from GUI to begin poll
 				//message of bytes, need to convert message to chars*
 				if (!connected)
@@ -1020,7 +1020,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			      connected = 1;
 			    }
 			    
-			    printf("Reading...\n");
+			    printf("Reading from client...\n");
 			    bzero(message, BUFSIZE);
 			    n = read(clientfd, message, BUFSIZE);
 			    if (n <= 0){ 
@@ -1043,14 +1043,25 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					strcpy(argu, message+1);
 					argu[strlen(argu)] = '\0';
 					printf("argu: %s\n", argu);
-					if(cmd == '2')
+					if(cmd == (char)-1)
+					{
+						//kiosk requests disconnection
+						close(clientfd);
+						connected = 0;
+						printf("Disconnected from client by request.\n");
+					}
+					else if(cmd == '2')
 					{
 						strcpy(argb, message+11);
 						argb[strlen(argb)] = '\0';
 					}
-					//sleep(3);
-					printf("Resuming...\n");
-					kioskWait = 0;
+					else
+					{
+						//sleep(3);
+						printf("Resuming...\n");
+						kioskWait = 0;
+					}
+					
 			    }
 				
 			}
@@ -1209,49 +1220,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						//KIOSK SCANNER MODE
 
-						// if (cmd == '0')
-						// {
-						// 	//init card mode
-						// 	if (NDEFinfo.current_ndef_length < 8) // if blank
-						// 	{
-
-						// 		int cid;
-						// 		strToInt(argu, &cid);
-						// 		char cidhex[BUFSIZE];
-						// 		intToHexStr(cid, cidhex);
-						// 		initcard(cidhex, TagInfo, NDEFinfo);	
-						// 	}
-						// 	else
-						// 	{
-						// 		//don't overwrite
-						// 		printf("Error: Card already initilized.\n" );
-						// 		//give option to erase?
-						// 	}
-
-						// }
-						// else if (cmd == '1')
-						// {
-						// 	//add (or subtract) balance
-
-						// 	//if add balance mode
-
-						// 	char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
-
-						// 	float credit;
-						// 	strToFloat(argu, &credit);
-
-						// 	transaction(pl, TagInfo, NDEFinfo, credit);
-							
-						// }
-						// else if (cmd == '2')
-						// {
-						// 	// blank card?
-						// 	unsigned char * NDEFMsg = NULL;
-						// 	unsigned int NDEFMsgLen = 0x00;
-						// 	printf("Blanking card...\n");
-						// 	writeMessage("", TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
-						// }
-
 						if (cmd == '0')
 						{
 							//blank card
@@ -1278,7 +1246,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							}
 							else if (0)
 							{
-								// if properly formatted
+								// TODO: if properly formatted
 							}
 							else
 							{
