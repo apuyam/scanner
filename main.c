@@ -666,6 +666,7 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 				printf("\n\t\t");
 			}
 		}
+		printf("\n");
 	}
 	
 	if(NULL != NDEFContent)
@@ -751,6 +752,7 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 				printf("\n\t\t");
 			}
 		}
+		printf("\n");
 	}
 	
 	if(NULL != NDEFContent)
@@ -789,8 +791,9 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 	}
 }
 
-/* takes payload string pl, extracts info into payload struct, subtracts diff from balance,
-writes new paylod with new balance to card, sends update to databse*/
+/* assuming decrypted pl, takes payload string pl, extracts info into payload struct, 
+subtracts diff from balance, writes new encrypted payload with new balance to card,
+sends update to databse*/
 void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta, int kiosk)
 {
 	char cid[9];
@@ -825,21 +828,20 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 
 	strncpy(p->timestamp, timestamp, 14);
-	printf("cid/dev/valid/balance/timestamp:\n");
+	printf("CID/Dev/Valid/Balance/Timestamp:\n");
 	printf("%i\n%c\n%c\n%f\n%s\n", p->cid, p->dev, p->valid, p->balance, p->timestamp);
 	/*before transaction*/
 
-	printf("transaction...\n\n");
+	printf("\nTransaction in progress...\n\n");
 
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
 	if ((dev == '0') && (valid == '1'))
 	{
-		printf("subtracting %f\n", delta);
+		printf("Change in balance: %f\n", delta);
 		p->balance += delta;
 		float f = p->balance;
 		sprintf(balance, "%X", *((int*)&f) );
-		printf("New balances: %s\n%f\n", balance, p->balance);
 
 		//TODO: update timestamp
 
@@ -847,15 +849,14 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		strcpy(resp, pl);
 		strncpy(resp+10, balance, 8);
 		resp[strlen(pl)] = '\0';
-		printf("Decrypted: %s\n", resp);
 
 		char testen[strlen(resp)];
 		strcpy(testen, resp);
 		testen[strlen(testen)] = '\0';
 
-		printf("Writing new balance...\n");
+		printf("Writing new balance: %f...\n", f);
 
-		printf("RESP:%s \n", resp);
+		printf("New payload: %s \n", resp);
 		encrypt(resp, KEY, PL_LEN);
 		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
@@ -989,7 +990,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			      connected = 0;
 			      printf("Disconnected from client.\n");
 			    }//error("ERROR reading from socket");
-			    printf("server received %d bytes: %s", n, message);
+			    printf("Server received %d bytes: %s \n", n, message);
 
 
 				// blocks while waiting for GUI
@@ -999,7 +1000,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			    	cmd = message[0];
 					strcpy(argu, message+1);
 					argu[strlen(argu)] = '\0';
-					printf("argu: %s\n", argu);
+					printf("Cmd argument: %s\n", argu);
 					if(cmd == (char)-1)
 					{
 						//kiosk requests disconnection
@@ -1161,8 +1162,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 
-						//TODO: encrypt/deencrypt
-
 						encrypt(pl, KEY, PL_LEN);
 
 						printf("Decrypted: %s\n", pl);
@@ -1185,21 +1184,29 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							printf("Blanking card...\n");
 							unsigned char * NDEFMsg = NULL;
 							unsigned int NDEFMsgLen = 0x00;
-							writeMessage(FORMAT_BLANK, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+							char blank[] = FORMAT_BLANK;
+							encrypt(blank, KEY, strlen(FORMAT_BLANK));
+							writeMessage(blank, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 							n = write(clientfd, "ack0", strlen("ack0"));
     							if (n < 0) 
       								error("ERROR writing to socket");
       						char end[BUFSIZE];
     						end[0] = (char)-128;
     						end[1] = '\0';
-							write(clientfd, end, strlen(end));
+							n = write(clientfd, end, strlen(end));
+							if (n < 0)
+        							error("ERROR writing to socket");
 						}
 						else if (cmd == '1')
 						{
 							//Format check
 							printf("Checking format...\n");
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
-							if (strcmp(pl, FORMAT_BLANK) == 0)
+							encrypt(pl, KEY, PL_LEN);
+							char blankCompare[strlen(FORMAT_BLANK)+1];
+							strncpy(blankCompare, pl, strlen(FORMAT_BLANK));
+							blankCompare[strlen(FORMAT_BLANK)] = '\0';
+							if (strcmp(blankCompare, FORMAT_BLANK) == 0)
 							{
 								printf("Verified blank card...\n");
 								//send "12"
@@ -1209,10 +1216,13 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
       							char end[BUFSIZE];
     							end[0] = (char)-128;
     							end[1] = '\0';
-							    write(clientfd, end, strlen(end));
+							    n = write(clientfd, end, strlen(end));
+							    if (n < 0)
+        							error("ERROR writing to socket");
 							}
-							else if (strlen(pl) <= 32)
+							else if (NDEFinfo.current_ndef_length == PL_LEN + 7)
 							{
+								printf("Checking card...\n");
 								char cid[9];
 						        char dev;
 						        char valid;
@@ -1222,13 +1232,17 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
     							cid[8] = '\0';
     							balance[8] = '\0';
     							timestamp[14] = '\0';
-        						printf("%s %c %c %s %s\n", cid, dev, valid, balance, timestamp);
+        						printf("Payload: %s %c %c %s %s\n", cid, dev, valid, balance, timestamp);
 
 
         						int cidint;
         						cidint = hexStrToInt(cid, &cidint);
         						char cidstr[BUFSIZE];
         						intToStr(cidint, cidstr);
+
+        						char validstr[2];
+        						validstr[0] = valid;
+        						validstr[1] = '\0';
 
         						float balfloat;
         						balfloat = hexStrToFloat(balance, &balfloat);
@@ -1238,28 +1252,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
     							end[0] = (char)-128;
     							end[1] = '\0';
 							    
-							    printf("CID/BAL STR %s %s\n", cidstr, balstr);
+							    printf("CID: %s VALID: %s BAL: %s\n", cidstr, validstr, balstr);
 
 							    char resp1[BUFSIZE];
 							    bzero(resp1, BUFSIZE);
 							    strcat(resp1, "ack13");
 							    strcat(resp1, cidstr);
+							    strcat(resp1, validstr);
 							    strcat(resp1, balstr);
 							    strcat(resp1, end);
-							    printf("%s\n", resp1);
-							    write(clientfd, resp1, strlen(resp1));
-        						// n = write(clientfd, "ack13", strlen("ack13"));
-        						// if (n < 0)
-        						// 	error("ERROR writing to socket");
-        						// n = write(clientfd, cidstr, strlen(cidstr));
-        						// if (n < 0)
-        						// 	error("ERROR writing to socket");
-        						// n = write(clientfd, balstr, strlen(balstr));
-        						// if (n < 0)
-        						// 	error("ERROR writing to socket");
-        						// n = write(clientfd, end, strlen(end));
-        						// if (n < 0)
-        						// 	error("ERROR writing to socket");
+							    printf("Sending ack: %s\n", resp1);
+							    n = write(clientfd, resp1, strlen(resp1));
+        						if (n < 0)
+        							error("ERROR writing to socket");
 
 
 							}
@@ -1279,7 +1284,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						}
 						else if (cmd == '2')
 						{
-							if (NDEFinfo.current_ndef_length < 8) // if blank
+							if (NDEFinfo.current_ndef_length == 7 + strlen(FORMAT_BLANK)) // if blank
 							{
 								printf("Initializing card...");
 								char argcid[10];
@@ -1299,6 +1304,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								floatToHexStr(balance, hexbal);
 								hexbal[8] = '\0';
 
+								//encrypted in initcard
 								initcard(cidhex, hexbal, TagInfo, NDEFinfo);
 								n = write(clientfd, "ack2", strlen("ack2"));
     							if (n < 0) 
@@ -1319,6 +1325,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						{
 							printf("Adding balance to card...\n");
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
+							encrypt(pl, KEY, PL_LEN);
 							float credit;
 							strToFloat(argu, &credit);
 							transaction(pl, TagInfo, NDEFinfo, credit, 1);
@@ -1350,6 +1357,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					memcpy(&TagInfo, &g_TagInfo, sizeof(nfc_tag_info_t));
 					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
 					char cidstr[BUFSIZE];
+					char dev;
+					char valid;
 					if(0x00 == res)
 					{
 					printf("\n\t\tRAW APDU transceive failed\n");
@@ -1363,17 +1372,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								printf("%02X ", SelectAIDResponse[i]);
 							}
 							printf("\n\n");
-	    					sscanf(SelectAIDResponse, "%8c", cidstr);
+							//TODO: decrypt
+	    					encrypt(SelectAIDResponse, KEY, PL_LEN);
+	    					sscanf(SelectAIDResponse, "%8c%c%c", cidstr, &dev, &valid);
 	    					cidstr[8] = '\0';
-	    					printf("CID STRING:%s\n",cidstr);
+	    					printf("CID STRING:%s DEV:%c VALID:%c\n",cidstr,dev,valid);
 					}
-
+					if ((dev == '1') && (valid == '1')){ 
 					printf("Updating database...\n");
 					char msgBuf[BUFSIZE];
 					int port = DBPORT;
 					char hostname[] = HOSTNAME;
 					int cidint;
-    				cidint = (int)strtol(cidstr, NULL, 16);
+    					cidint = (int)strtol(cidstr, NULL, 16);
 					char* msgParam = malloc(BUFSIZE);
 					strcpy(msgBuf, createBalanceUpdate(cidint, FEE, msgParam));
 					
@@ -1385,8 +1396,12 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						printf("MESSAGES OFF: NOT SENDING\n");
 					}
-
+					
 					free(msgParam);					
+					}
+					else{
+						printf("Error: phone not valid device\n");
+					}
 				}
  				framework_LockMutex(g_devLock);
 			}
@@ -1726,18 +1741,6 @@ int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, uns
 	
 	return res;
 }
-
-// if(0xFF == LookForTag(arg, arg_len, "-r", &text, 0x00) && 0xFF == LookForTag(arg, arg_len, "--rep", &text, 0x01))
-// 			{
-// 				printf("Representation missing (-r)\n");
-// 				res = 0xFF;
-// 			}
-			
-// 			if(0xFF == LookForTag(arg, arg_len, "-l", &lang, 0x00) && 0xFF == LookForTag(arg, arg_len, "--lang", &lang, 0x01))
-// 			{
-// 				printf("Language missing (-l)\n");
-// 				res = 0xFF;
-// 			}
 
 /*if data = NULL this tag is not followed by dataStr : for example -h --help
 if format = 0 tag format -t "text" if format=1 tag format : --type=text*/
