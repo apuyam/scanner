@@ -28,8 +28,6 @@
 #include "functions.h"
 //#include "wiringPi.h"
 
-#define KEY "ABCD 1234 XWYZ 4567"
-
 typedef enum eDevState
 {
 	eDevState_NONE,
@@ -668,16 +666,6 @@ void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned c
 				printf("\n\t\t");
 			}
 		}
-		// printf("\nRaw Test\n");
-
-		// unsigned char* rawtest[ndefRawLen];
-
-		// for (i = 0x00; i < ndefRawLen; i++)
-		// {
-		// 	rawtest[i] = NDEFContent[i];
-
-		// 	printf("%02X ", rawtest[i]);
-		// }
 	}
 	
 	if(NULL != NDEFContent)
@@ -763,16 +751,6 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 				printf("\n\t\t");
 			}
 		}
-		// printf("\nRaw Test\n");
-
-		// unsigned char* rawtest[ndefRawLen];
-
-		// for (i = 0x00; i < ndefRawLen; i++)
-		// {
-		// 	rawtest[i] = NDEFContent[i];
-
-		// 	printf("%02X ", rawtest[i]);
-		// }
 	}
 	
 	if(NULL != NDEFContent)
@@ -795,22 +773,10 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
     char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
     int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
 
-   // printf("\nPRE MESSAGE: %s %d\n", resp, sizeof(resp));
-//	for (i=0; i<NDEFMsgLen; i++)
-//	{
-//		printf("%02X ", NDEFMsg[i]);
-//	}
-
 	res = BuildNDEFMessage(argc, &argv[0], &NDEFMsg, &NDEFMsgLen);
 
-	
-//	printf("\nWRITE MESSAGE: %s \n", NDEFMsg);
-//	for (i=0; i<NDEFMsgLen; i++)
-//	{
-//		printf("%02X ", NDEFMsg[i]);
-//	}
 	res = WriteTag(TagInfo, NDEFMsg, NDEFMsgLen);
-//	printf("\n size %d\n", NDEFMsgLen);
+
 	if(0x00 == res)
 	{
 		printf("Write Tag OK\n Read back data");
@@ -822,9 +788,10 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 		}
 	}
 }
+
 /* takes payload string pl, extracts info into payload struct, subtracts diff from balance,
 writes new paylod with new balance to card, sends update to databse*/
-void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta)
+void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta, int kiosk)
 {
 	char cid[9];
 	char dev;
@@ -880,31 +847,40 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		strcpy(resp, pl);
 		strncpy(resp+10, balance, 8);
 		resp[strlen(pl)] = '\0';
-		printf("New Payload:%s\n", resp);
+		printf("Decrypted: %s\n", resp);
 
-		//char testen[strlen(resp)];
-		//strcpy(testen, resp);
-		//testen[strlen(testen)] = '\0';
-
-		//printf("Encrypted: %s\n", encrypt(testen, KEY, PL_LEN));
+		char testen[strlen(resp)];
+		strcpy(testen, resp);
+		testen[strlen(testen)] = '\0';
 
 		printf("Writing new balance...\n");
 
-		//char testtest[] = "test";
 		printf("RESP:%s \n", resp);
+		encrypt(resp, KEY, PL_LEN);
 		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 
-		printf("Updating database..");
+		if (kiosk == 0)
+		{
+			printf("Updating database..");
 
-		char msgBuf[BUFSIZE];
-		int port = DBPORT;
-		char hostname[] = HOSTNAME;
+			char msgBuf[BUFSIZE];
+			int port = DBPORT;
+			char hostname[] = HOSTNAME;
 
-		char* msgParam = malloc(BUFSIZE);
-		strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
+			char* msgParam = malloc(BUFSIZE);
+			strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
+			
+			if (MESSAGESON)
+			{
+				sendMessageToServer(hostname, port, msgBuf);
+			}
+			else
+			{
+				printf("MESSAGES OFF: NOT SENDING\n");
+			}
+			free(msgParam);
+		}
 		
-		//sendMessageToServer(hostname, port, msgBuf);
-		free(msgParam);
 
 		printf("Writing finished.\n");
 		//TODO: Green LED
@@ -924,33 +900,21 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
-	char resp[PL_LEN];
+	char resp[PL_LEN+1];
 	strcpy(resp, cid);
 	char initString[] = "01432a000020151010242424";
 	strncpy(initString+2, balance, 8);
 	//ffffffff01432a000020151010242424
 	strcpy(resp+8, initString);
-	resp[PL_LEN-1] = '\0';
+	resp[PL_LEN] = '\0';
 
-	// encrypt(resp, KEY, PL_LEN);
-	// //printf("Encrypted payload: %s\n", resp);
-	// printf("New Payload:%s\n", resp);
-	// int i;
-	// for (i=0; i<sizeof(resp); i++)
-	// {
-	// 	printf("%02X ", resp[i]);
-	// }
-
-	// encrypt(resp, KEY, PL_LEN);
-
-	// printf("New New Payload:%s\n", resp);
-	
-	// for (i=0; i<sizeof(resp); i++)
-	// {
-	// 	printf("%02X ", resp[i]);
-	// }
+	encrypt(resp, KEY, PL_LEN);
+	printf("Encrypted payload: %s length %d\n", resp, strlen(resp));
 
 	writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+
+	encrypt(resp, KEY, PL_LEN);
+	printf("Decrypted payload: %s length %d\n", resp, strlen(resp));
 
 	printf("\nWriting finished.\n");
 }
@@ -1002,7 +966,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		serverfd = initServer(serverfd, port);
 	}
 
-
 	do
 	{
 		if (0x06 == mode)
@@ -1012,8 +975,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 				//KIOSK SCANNER MODE
 				//block for IPC
 				printf("Waiting for client...\n");
-				//TODO: IPC: wait for prompt from GUI to begin poll
-				//message of bytes, need to convert message to chars*
 				if (!connected)
 			    {
 			      clientfd = acceptClient(clientfd, serverfd, message);
@@ -1030,13 +991,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			    }//error("ERROR reading from socket");
 			    printf("server received %d bytes: %s", n, message);
 
-				
-				//char hostname[] = "169.254.85.87";
-
-				//COMMENT OUT SLEEP IF TESING TCP
 
 				// blocks while waiting for GUI
-				// readMessageFromServer(hostname, port, message);
+
 			    if (connected)
 			    {
 			    	cmd = message[0];
@@ -1050,17 +1007,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						connected = 0;
 						printf("Disconnected from client by request.\n");
 					}
-					else if(cmd == '2')
-					{
-						strcpy(argb, message+11);
-						argb[strlen(argb)] = '\0';
-					}
 					else
 					{
 						//sleep(3);
 						printf("Resuming...\n");
 						kioskWait = 0;
 					}
+					if(cmd == '2')
+					{
+						//extract balance from message and save in argb
+						strcpy(argb, message+11);
+						argb[strlen(argb)] = '\0';
+					}
+					
 					
 			    }
 				
@@ -1204,11 +1163,11 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 						//TODO: encrypt/deencrypt
 
-						//encrypt(pl, KEY, PL_LEN);
+						encrypt(pl, KEY, PL_LEN);
 
-						printf("%s\n", pl);
+						printf("Decrypted: %s\n", pl);
 
-						transaction(pl, TagInfo, NDEFinfo, FEE);
+						transaction(pl, TagInfo, NDEFinfo, FEE, 0);
 						// for(k = 0; k<2; k++)
 						// {
 						// 	digitalWrite(28, HIGH);delay(500);
@@ -1230,6 +1189,10 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							n = write(clientfd, "ack0", strlen("ack0"));
     							if (n < 0) 
       								error("ERROR writing to socket");
+      						char end[BUFSIZE];
+    						end[0] = (char)-128;
+    						end[1] = '\0';
+							write(clientfd, end, strlen(end));
 						}
 						else if (cmd == '1')
 						{
@@ -1243,10 +1206,62 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								n = write(clientfd, "ack12", strlen("ack12"));
     							if (n < 0) 
       								error("ERROR writing to socket");
+      							char end[BUFSIZE];
+    							end[0] = (char)-128;
+    							end[1] = '\0';
+							    write(clientfd, end, strlen(end));
 							}
-							else if (0)
+							else if (strlen(pl) <= 32)
 							{
-								// TODO: if properly formatted
+								char cid[9];
+						        char dev;
+						        char valid;
+						        char balance[9];
+						        char timestamp[15];
+								sscanf(pl, "%8c%c%c%8c%s", cid, &dev, &valid, balance, timestamp);
+    							cid[8] = '\0';
+    							balance[8] = '\0';
+    							timestamp[14] = '\0';
+        						printf("%s %c %c %s %s\n", cid, dev, valid, balance, timestamp);
+
+
+        						int cidint;
+        						cidint = hexStrToInt(cid, &cidint);
+        						char cidstr[BUFSIZE];
+        						intToStr(cidint, cidstr);
+
+        						float balfloat;
+        						balfloat = hexStrToFloat(balance, &balfloat);
+        						char balstr[BUFSIZE];
+        						floatToStr(balfloat, balstr);
+        						char end[BUFSIZE];
+    							end[0] = (char)-128;
+    							end[1] = '\0';
+							    
+							    printf("CID/BAL STR %s %s\n", cidstr, balstr);
+
+							    char resp1[BUFSIZE];
+							    bzero(resp1, BUFSIZE);
+							    strcat(resp1, "ack13");
+							    strcat(resp1, cidstr);
+							    strcat(resp1, balstr);
+							    strcat(resp1, end);
+							    printf("%s\n", resp1);
+							    write(clientfd, resp1, strlen(resp1));
+        						// n = write(clientfd, "ack13", strlen("ack13"));
+        						// if (n < 0)
+        						// 	error("ERROR writing to socket");
+        						// n = write(clientfd, cidstr, strlen(cidstr));
+        						// if (n < 0)
+        						// 	error("ERROR writing to socket");
+        						// n = write(clientfd, balstr, strlen(balstr));
+        						// if (n < 0)
+        						// 	error("ERROR writing to socket");
+        						// n = write(clientfd, end, strlen(end));
+        						// if (n < 0)
+        						// 	error("ERROR writing to socket");
+
+
 							}
 							else
 							{
@@ -1255,6 +1270,10 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								n = write(clientfd, "ack11", strlen("ack11"));
     							if (n < 0) 
       								error("ERROR writing to socket");
+      							char end[BUFSIZE];
+    							end[0] = (char)-128;
+    							end[1] = '\0';
+							    write(clientfd, end, strlen(end));
 								
 							}
 						}
@@ -1277,13 +1296,17 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								printf("BALANCE: %f\n", balance);
 
 								char hexbal[9];
-								floatToStr(balance, hexbal);
+								floatToHexStr(balance, hexbal);
 								hexbal[8] = '\0';
 
 								initcard(cidhex, hexbal, TagInfo, NDEFinfo);
 								n = write(clientfd, "ack2", strlen("ack2"));
     							if (n < 0) 
-      								error("ERROR writing to socket");	
+      								error("ERROR writing to socket");
+      							char end[BUFSIZE];
+    							end[0] = (char)-128;
+    							end[1] = '\0';
+							    write(clientfd, end, strlen(end));	
 							}
 							else
 							{
@@ -1298,11 +1321,15 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 							float credit;
 							strToFloat(argu, &credit);
-							transaction(pl, TagInfo, NDEFinfo, credit);
+							transaction(pl, TagInfo, NDEFinfo, credit, 1);
 
 							n = write(clientfd, "ack3", strlen("ack3"));
     							if (n < 0) 
       								error("ERROR writing to socket");	
+      						char end[BUFSIZE];
+    						end[0] = (char)-128;
+    						end[1] = '\0';
+							write(clientfd, end, strlen(end));
 
 						}
 						//else if etc....		
@@ -1322,6 +1349,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 					memcpy(&TagInfo, &g_TagInfo, sizeof(nfc_tag_info_t));
 					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
+					char cidstr[BUFSIZE];
 					if(0x00 == res)
 					{
 					printf("\n\t\tRAW APDU transceive failed\n");
@@ -1329,13 +1357,36 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					else
 					{
 					printf("\n\t\tAPDU Select AID command sent\n\t\tResponse : \n\t\t");
-					for(i = 0x00; i < (unsigned int)res; i++)
-						{	
-							printf("%02X ", SelectAIDResponse[i]);
-						}
-						printf("\n\n");
+
+						for(i = 0x00; i < (unsigned int)res; i++)
+							{	
+								printf("%02X ", SelectAIDResponse[i]);
+							}
+							printf("\n\n");
+	    					sscanf(SelectAIDResponse, "%8c", cidstr);
+	    					cidstr[8] = '\0';
+	    					printf("CID STRING:%s\n",cidstr);
 					}
-					//TODO: Read SelectAIDResponse and convert to payload.					
+
+					printf("Updating database...\n");
+					char msgBuf[BUFSIZE];
+					int port = DBPORT;
+					char hostname[] = HOSTNAME;
+					int cidint;
+    				cidint = (int)strtol(cidstr, NULL, 16);
+					char* msgParam = malloc(BUFSIZE);
+					strcpy(msgBuf, createBalanceUpdate(cidint, FEE, msgParam));
+					
+					if (MESSAGESON)
+					{
+						sendMessageToServer(hostname, port, msgBuf);
+					}
+					else
+					{
+						printf("MESSAGES OFF: NOT SENDING\n");
+					}
+
+					free(msgParam);					
 				}
  				framework_LockMutex(g_devLock);
 			}

@@ -1,5 +1,5 @@
 #define FEE -2.50
-#define PL_LEN 33
+#define PL_LEN 32
 
 struct payload_struct {
 	int cid;
