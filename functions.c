@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 char* encrypt(char* input, char* key, int inputlen)
 {
     // for xor, decrypting is just re-encrypting with same key
@@ -30,9 +31,9 @@ float hexStrToFloat(char* str, float* f)
     return *f;
 }
 
-char* floatToStr(float f, char* str)
+char* floatToHexStr(float f, char* str)
 {
-    sprintf(str, "%08X", *((int*)&f) );
+    sprintf(str, "%08x", *((int*)&f) );
     
     return str;
 }
@@ -45,9 +46,32 @@ int strToInt(char* str, int* i)
     return *i;
 }
 
+int hexStrToInt(char*str, int* i)
+{
+    *i = (int)strtol(str, NULL, 16);
+    
+    return *i;
+}
+
 char* intToHexStr(int i, char* str)
 {
-    sprintf(str, "%08X", i);
+    sprintf(str, "%08x", i);
+    str[strlen(str)] = '\0';
+
+    return str;
+}
+
+char* intToStr(int i, char* str)
+{
+    sprintf(str, "%010d", i);
+    str[strlen(str)] = '\0';
+
+    return str;
+}
+
+char* floatToStr(float f, char* str)
+{
+    sprintf(str, "%f", f);
     str[strlen(str)] = '\0';
 
     return str;

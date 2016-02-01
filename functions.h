@@ -1,3 +1,5 @@
+#define KEY "GHIJKLMNOPQRSTUVWXYZYXWVUTSRQPON"
+
 char* encrypt(char* input, char* key, int inputlen);
 
 
@@ -8,10 +10,19 @@ float strToFloat(char* str, float* f);
 float hexStrToFloat(char* str, float* f);
 
 /*Converts float eg. 2.500000 to hex string*/
-char* floatToStr(float f, char* str);
+char* floatToHexStr(float f, char* str);
 
 /*Converts string eg. "2147483647" to int*/
 int strToInt(char* str, int* i);
 
+/*Converts hex string to int eg. "18" to 24*/
+int hexStrToInt(char*str, int* i);
+
 /*Converts int eg. 2147483647 to hex string eg. "FFFFFFFF"*/
 char* intToHexStr(int i, char* str);
+
+/*Converts int to string eg. 24 to "24"*/
+char* intToStr(int i, char* str);
+
+/*Converts float to string eg 2.5 to "2.5"*/
+char* floatToStr(float f, char* str);
