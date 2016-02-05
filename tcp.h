@@ -1,10 +1,10 @@
-#define HOSTNAME "192.168.100.117"
+//#define HOSTNAME "192.168.100.117"
 //#define HOSTNAME "169.254.85.87"
-//#define HOSTNAME "192.169.0.24"
+#define HOSTNAME "192.169.0.24"
 #define DBPORT 5555
 #define GUIPORT 5556
 #define BUFSIZE 64
-#define FORMAT_BLANK ""
+#define FORMAT_BLANK "0101"
 #define LOGIN "scanner Capstone2015Scanner"
 #define CONNECTED
 #define MESSAGESON 0
