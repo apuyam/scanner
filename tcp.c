@@ -177,6 +177,7 @@ char* readMessageFromServer(char* hostname, int port, char* buf)
 
 char* createBalanceUpdate(int cid, float diff, char* msgParam)
 {
+    printf("Creating balance update...");
     int i;
     
     char cidBuf[BUFSIZE];
@@ -195,7 +196,7 @@ char* createBalanceUpdate(int cid, float diff, char* msgParam)
     strncpy(msgParam + 2, cidBuf, strlen(cidBuf));
     strncpy(msgParam + 2 + strlen(cidBuf) + 1, diffBuf, strlen(diffBuf));
     msgParam[i] = '\0';
-    printf("Message: %s\n", msgParam);
+    printf("Message to database: %s\n", msgParam);
 
     return msgParam;
 }
