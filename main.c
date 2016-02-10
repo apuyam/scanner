@@ -927,7 +927,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	unsigned int i = 0x00;
 	//int block = 0x15;
 	//unsigned char key[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	ndef_info_t NDEFinfo;
+	//ndef_info_t NDEFinfo;
 	eDevType DevTypeBck = eDevType_NONE;
 	/*Cmd Mifare Auth Key A : 0x60U*/
 	// unsigned char MifareAuthCmd[12] = {0x60U, 0x00 /*block*/, 0x02, 0x02, 0x02, 0x02, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/ , 0x00 /*key*/, 0x00 /*key*/};
@@ -938,7 +938,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	// unsigned char MifareReadCmd[2] = {0x30U,  /*block*/ 0x00};
 	// unsigned char MifareReadResp[255];
 	
-	nfc_tag_info_t TagInfo;
+	//nfc_tag_info_t TagInfo;
 	
 	// MifareAuthCmd[1] = block;
 	// memcpy(&MifareAuthCmd[6], key, 6);
@@ -961,6 +961,28 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
 	//char* message = "12.50";
 	//char* message = "02147483647";
+	if (0x05 == mode && CACHING)
+	{
+		//TODO: ask for database cache
+		printf("Requesting database cache...\n");
+		char msgBuf[BUFSIZE];
+		int port = DBPORT;
+		char hostname[] = HOSTNAME;
+		int cidint;
+		char* msgParam = malloc(BUFSIZE);
+		strcpy(msgBuf, createGetEntryAll(msgBuf));
+		
+		if (MESSAGESON)
+		{
+			sendMessageToServer(hostname, port, msgBuf);
+
+		}
+		else
+		{
+			printf("MESSAGES OFF: NOT SENDING\n");	
+		}
+
+	}
 	if (0x06 == mode)
 	{
 		//initialize server
@@ -969,6 +991,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 	do
 	{
+		ndef_info_t NDEFinfo;
+		nfc_tag_info_t TagInfo;
 		if (0x06 == mode)
 		{
 			while (kioskWait)
@@ -1202,7 +1226,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							//Format check
 							printf("Checking format...\n");
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
-							encrypt(pl, KEY, PL_LEN);
+							encrypt(pl, KEY, NDEFinfo.current_ndef_length - 7);
 							char blankCompare[strlen(FORMAT_BLANK)+1];
 							strncpy(blankCompare, pl, strlen(FORMAT_BLANK));
 							blankCompare[strlen(FORMAT_BLANK)] = '\0';
