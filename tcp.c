@@ -91,6 +91,11 @@ void sendMessageToServer(char* hostname, int port, char* buf)
     int sockfd, n;
     struct sockaddr_in serveraddr;
     struct hostent *server;
+    int cache = 0;
+    if (buf[0] == '7')
+    {
+        cache = 1;
+    }
 
     /* socket: create the socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -131,6 +136,29 @@ void sendMessageToServer(char* hostname, int port, char* buf)
     end[0] = (char)-128;
     end[1] = '\0';
     write(sockfd, end, strlen(end));
+
+    if (cache)
+    {
+        sleep(1);
+        char foo[2];
+        foo[1] = '\0';
+        int i;
+        printf("Awaiting database cache...\n");
+        while (foo[0] != -128)
+        {
+            foo[0] = '\0';
+            while (foo[0] != '\n' && foo[0] != -128)
+            {
+               n = read(sockfd, foo, 1);
+               if (n < 0) 
+               error("ERROR reading from socket");
+               printf("%c", foo[0]);
+               fflush(stdout);
+
+            }
+
+        }
+    }
     
     close(sockfd);
 }
@@ -227,7 +255,6 @@ char* createEntry(int cid, float balance, char* msgParam)
 
 char* createGetEntry(int cid, char* msgParam)
 {
-    //TODO: email (from GUI?), not stored on card)
     char cidBuf[BUFSIZE];
     
     snprintf(cidBuf, BUFSIZE, "%d", cid);
@@ -238,6 +265,16 @@ char* createGetEntry(int cid, char* msgParam)
     msgParam[1] = ' ';
     strncpy(msgParam + 2, cidBuf, strlen(cidBuf));
     msgParam[i] = '\0';
+    printf("Message: %s\n", msgParam);
+    
+    return msgParam;
+}
+
+char* createGetEntryAll(char* msgParam)
+{
+    //cmd = 7
+    msgParam[0] = '7';
+    msgParam[1] = '\0';
     printf("Message: %s\n", msgParam);
     
     return msgParam;

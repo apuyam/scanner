@@ -7,7 +7,8 @@
 #define FORMAT_BLANK "0101"
 #define LOGIN "scanner Capstone2015Scanner"
 #define CONNECTED
-#define MESSAGESON 0
+#define MESSAGESON 1
+#define CACHING 1
 
 void error(char *msg);
 
@@ -31,6 +32,10 @@ char* createEntry(int cid, float balance, char* msgParam);
 /* creates message to send to database of form 
 "7 cid" and stores it in msgParam*/
 char* createGetEntry(int cid, char* msgParam);
+
+/* creates message to send to database of form 
+"7" and stores it in msgParam*/
+char* createGetEntryAll(char* msgParam);
 
 /*Example:
     char* msgParam = malloc(BUFSIZE);
