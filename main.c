@@ -961,6 +961,28 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
 	//char* message = "12.50";
 	//char* message = "02147483647";
+	if (MESSAGESON && REQTIME)
+	{
+		printf("Updating time from database...\n");
+		char msgBuf[BUFSIZE];
+		int port = DBPORT;
+		char hostname[] = HOSTNAME;
+		char* msgParam = malloc(BUFSIZE);
+		strcpy(msgBuf, createGetTime(msgBuf));
+		sendMessageToServer(hostname, port, msgBuf);
+		char dbTime[23];
+		strncpy(dbTime, "\"", 1);
+		strncpy(dbTime+1, msgBuf+1, 20);
+		strncpy(dbTime+21, "\"", 1);
+		dbTime[23] = '\0';
+		printf("Time: %s\n", dbTime);
+		char cmd[BUFSIZE] = "sudo date -s ";
+		strcat(cmd, dbTime);
+		printf("%s\n",cmd);
+		printf("Setting system time...\n");
+		system(cmd);
+
+	}
 	if (0x05 == mode && CACHING)
 	{
 		//TODO: ask for database cache
@@ -968,7 +990,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		char msgBuf[BUFSIZE];
 		int port = DBPORT;
 		char hostname[] = HOSTNAME;
-		int cidint;
 		char* msgParam = malloc(BUFSIZE);
 		strcpy(msgBuf, createGetEntryAll(msgBuf));
 		
