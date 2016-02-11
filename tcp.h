@@ -1,6 +1,6 @@
-//#define HOSTNAME "192.168.100.117"
+#define HOSTNAME "192.168.100.117"
 //#define HOSTNAME "169.254.85.87"
-#define HOSTNAME "192.169.0.24"
+//#define HOSTNAME "192.169.0.24"
 #define DBPORT 5555
 #define GUIPORT 5556
 #define BUFSIZE 64
@@ -9,6 +9,7 @@
 #define CONNECTED
 #define MESSAGESON 1
 #define CACHING 1
+#define REQTIME 0
 
 void error(char *msg);
 
@@ -18,7 +19,8 @@ int initServer(int parentfd, int portno);
 /*KIOSK MODE: block while waiting for a client connection*/
 int acceptClient(int childfd, int parentfd, char* buf);
 
-/* connect to hostname thru port, send buf, disconnect. */
+/* connect to hostname thru port, send buf, disconnect. 
+reads before disconnecting if sending a get message*/
 void sendMessageToServer(char* hostname, int port, char* buf);
 
 /* creates message to send to database of form 
@@ -36,6 +38,10 @@ char* createGetEntry(int cid, char* msgParam);
 /* creates message to send to database of form 
 "7" and stores it in msgParam*/
 char* createGetEntryAll(char* msgParam);
+
+/* creates message to send to database of form 
+"7" and stores it in msgParam*/
+char* createGetTime(char* msgParam);
 
 /*Example:
     char* msgParam = malloc(BUFSIZE);
