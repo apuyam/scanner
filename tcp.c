@@ -91,10 +91,14 @@ void sendMessageToServer(char* hostname, int port, char* buf)
     int sockfd, n;
     struct sockaddr_in serveraddr;
     struct hostent *server;
-    int cache = 0;
-    if (buf[0] == '7')
+    int resp = 0;// 1 for time reqest, 7 for cache request
+    if (buf[0] == '1')
     {
-        cache = 1;
+        resp = 1;
+    }
+    else if (buf[0] == '7')
+    {
+        resp = 7;
     }
 
     /* socket: create the socket */
@@ -137,27 +141,61 @@ void sendMessageToServer(char* hostname, int port, char* buf)
     end[1] = '\0';
     write(sockfd, end, strlen(end));
 
-    if (cache)
+    if (resp == 1)
     {
+        //save time response in buf
+        bzero(buf, BUFSIZE);
         sleep(1);
         char foo[2];
         foo[1] = '\0';
-        int i;
-        printf("Awaiting database cache...\n");
-        while (foo[0] != -128)
+        int i = 0;
+        printf("Awaiting database time...\n");
+        while (foo[0] != (char)-128)
         {
             foo[0] = '\0';
-            while (foo[0] != '\n' && foo[0] != -128)
+            while (foo[0] != '\n' && foo[0] != (char)-128)
             {
                n = read(sockfd, foo, 1);
                if (n < 0) 
                error("ERROR reading from socket");
                printf("%c", foo[0]);
+               buf[i] = foo[0];
+               i++;
                fflush(stdout);
 
             }
 
         }
+    }
+    else if (resp == 7)
+    {
+      //write cache response to file
+       printf("Awaiting database cache...\n");
+       FILE *fw;
+       fw = fopen("cache.xml", "w");
+       char foo[2];
+       foo[1] = '\0';
+       int i;
+       int start = 0;
+       while (foo[0] != (char)-128)
+       {
+           foo[0] = '\0';
+           while (foo[0] != '\n' && foo[0] != (char)-128)
+           {
+              n = read(sockfd, foo, 1);
+              if (n < 0) 
+               error("ERROR reading from socket");
+              printf("%c", foo[0]);
+              if(foo[0] == '<')
+                start = 1;
+              if(foo[0] != (char)-128 && start)
+                  fputc(foo[0], fw);
+              fflush(stdout);
+
+           }
+
+       }
+       fclose(fw);
     }
     
     close(sockfd);
@@ -274,6 +312,16 @@ char* createGetEntryAll(char* msgParam)
 {
     //cmd = 7
     msgParam[0] = '7';
+    msgParam[1] = '\0';
+    printf("Message: %s\n", msgParam);
+    
+    return msgParam;
+}
+
+char* createGetTime(char* msgParam)
+{
+    //cmd = 7
+    msgParam[0] = '1';
     msgParam[1] = '\0';
     printf("Message: %s\n", msgParam);
     
