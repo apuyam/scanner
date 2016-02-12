@@ -1,4 +1,7 @@
 #define KEY "GHIJKLMNOPQRSTUVWXYZYXWVUTSRQPON"
+#define DATEFORMAT "%b %d %Y %H:%M:%S"
+#define DATEPLFORMAT "%Y%m%d%H%M%S"
+#define TRANSFERSOFF 1
 
 char* encrypt(char* input, char* key, int inputlen);
 
@@ -26,3 +29,7 @@ char* intToStr(int i, char* str);
 
 /*Converts float to string eg 2.5 to "2.5"*/
 char* floatToStr(float f, char* str);
+
+char* createPLTime(struct tm* new_t, char* buf);
+
+double comparePLTime(char* timestamp);
