@@ -1,14 +1,15 @@
 #define HOSTNAME "192.168.100.117"
 //#define HOSTNAME "169.254.85.87"
 //#define HOSTNAME "192.169.0.24"
+//#define HOSTNAME "140.193.234.86"
 #define DBPORT 5555
 #define GUIPORT 5556
 #define BUFSIZE 64
 #define FORMAT_BLANK "0101"
 #define LOGIN "scanner Capstone2015Scanner"
 #define CONNECTED
-#define MESSAGESON 1
-#define CACHING 1
+#define MESSAGESON 0
+#define CACHING 0
 #define REQTIME 0
 
 void error(char *msg);

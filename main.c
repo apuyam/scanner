@@ -15,12 +15,12 @@
  *  limitations under the License.
  *
  ******************************************************************************/
- 
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include "linux_nfc_api.h"
 #include "tools.h"
 #include "payload.h"
@@ -838,30 +838,52 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	unsigned int NDEFMsgLen = 0x00;
 	if ((dev == '0') && (valid == '1'))
 	{
-		printf("Change in balance: %f\n", delta);
-		p->balance += delta;
-		float f = p->balance;
-		sprintf(balance, "%X", *((int*)&f) );
 
 		//TODO: update timestamp
-
-		char resp[strlen(pl)];
-		strcpy(resp, pl);
-		strncpy(resp+10, balance, 8);
-		resp[strlen(pl)] = '\0';
-
-		char testen[strlen(resp)];
-		strcpy(testen, resp);
-		testen[strlen(testen)] = '\0';
-
-		printf("Writing new balance: %f...\n", f);
-
-		printf("New payload: %s \n", resp);
-		encrypt(resp, KEY, PL_LEN);
-		writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
-
+		//if time difference is more than 1 hr 15, charge balance and write new time stamp
+		//else no charge
+		double diffTime = 0;
 		if (kiosk == 0)
 		{
+			char* buf[BUFSIZE];
+			diffTime = comparePLTime(p->timestamp);
+			printf("Time diff (s) %f\n", diffTime);
+			if (diffTime > 4500 || TRANSFERSOFF)
+			{
+				printf("Transfer expired, charging card and setting new timestamp...\n");
+				//generate current time string
+				char buf[BUFSIZE];
+				time_t cur_t;
+				time(&cur_t);
+				struct tm* tm_new;
+				tm_new = localtime(&cur_t);
+				createPLTime(tm_new, buf);
+				printf("ayay%s\n", buf);
+
+				printf("Change in balance: %f\n", delta);
+				p->balance += delta;
+				float f = p->balance;
+				sprintf(balance, "%X", *((int*)&f) );
+
+				char resp[strlen(pl)];
+				strcpy(resp, pl);
+				strncpy(resp+10, balance, 8);
+				//strncpy(resp+18, buf, 14);
+				resp[strlen(pl)] = '\0';
+
+				printf("Writing new balance: %f...\n", f);
+
+				printf("New payload: %s \n", resp);
+				encrypt(resp, KEY, PL_LEN);
+				writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+
+			}
+			else
+			{
+				printf("Transfer still valid, not charging card, not changing timestamp...\n");
+				delta = 0;		
+
+			}
 			printf("Updating database..");
 
 			char msgBuf[BUFSIZE];
@@ -881,7 +903,28 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			}
 			free(msgParam);
 		}
-		
+		else
+		{
+			//adding balance
+			printf("Adding balance to card...\n");
+
+			printf("Change in balance: %f\n", delta);
+			p->balance += delta;
+			float f = p->balance;
+			sprintf(balance, "%X", *((int*)&f) );
+
+			char resp[strlen(pl)];
+			strcpy(resp, pl);
+			strncpy(resp+10, balance, 8);
+			resp[strlen(pl)] = '\0';
+
+			printf("Writing new balance: %f...\n", f);
+
+			printf("New payload: %s \n", resp);
+			encrypt(resp, KEY, PL_LEN);
+			writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+		}
+
 
 		printf("Writing finished.\n");
 		//TODO: Green LED
@@ -899,12 +942,24 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 
 	printf("Initializing Card...\n\n");
 
+	//timestamp should be current time;
+
+	char buf[BUFSIZE];
+	time_t cur_t;
+	time(&cur_t);
+	struct tm* tm_new;
+	tm_new = localtime(&cur_t);
+	createPLTime(tm_new, buf);
+	printf("Timestamp: %s %d\n", buf, strlen(buf));
+
+
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
 	char resp[PL_LEN+1];
 	strcpy(resp, cid);
 	char initString[] = "01432a000020151010242424";
 	strncpy(initString+2, balance, 8);
+	strncpy(initString+10, buf, 14);
 	//ffffffff01432a000020151010242424
 	strcpy(resp+8, initString);
 	resp[PL_LEN] = '\0';
