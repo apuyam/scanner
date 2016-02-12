@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <time.h>
+#include "functions.h"
+#include "tcp.h"
 
 char* encrypt(char* input, char* key, int inputlen)
 {
@@ -75,4 +77,28 @@ char* floatToStr(float f, char* str)
     str[strlen(str)] = '\0';
 
     return str;
+}
+
+char* createPLTime(struct tm* new_t, char* buf)
+{
+    char temp[BUFSIZE];
+    strftime(temp, sizeof(temp), DATEPLFORMAT, new_t);
+    strcpy(buf, temp);
+    buf[15] = '\0';
+    printf("New timestamp: %s\n", buf);
+    
+    return buf;
+}
+
+double comparePLTime(char* timestamp)
+{
+    double diff;
+    struct tm tmpl;
+    strptime(timestamp, DATEPLFORMAT, &tmpl);
+    time_t end_t;
+    time_t pl_t = mktime(&tmpl);
+    time(&end_t);
+    diff = difftime(end_t,pl_t);
+    
+    return diff;
 }
