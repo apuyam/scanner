@@ -1,7 +1,8 @@
 #define KEY "GHIJKLMNOPQRSTUVWXYZYXWVUTSRQPON"
 #define DATEFORMAT "%b %d %Y %H:%M:%S"
 #define DATEPLFORMAT "%Y%m%d%H%M%S"
-#define TRANSFERSOFF 1
+#define DATETSFORMAT "%Y-%m-%d %H:%M:%S"
+#define TRANSFERSOFF 0
 
 char* encrypt(char* input, char* key, int inputlen);
 
@@ -30,6 +31,11 @@ char* intToStr(int i, char* str);
 /*Converts float to string eg 2.5 to "2.5"*/
 char* floatToStr(float f, char* str);
 
+/*Creates date string of form DATEPLFORMAT from new_t and stores in buf*/
 char* createPLTime(struct tm* new_t, char* buf);
 
+/*Checks date string timestamp and compares to current system time.
+Returns difference (curr-timestamp) in seconds*/
 double comparePLTime(char* timestamp);
+
+void getFullCache(char* hostname, int port);

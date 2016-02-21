@@ -26,6 +26,7 @@
 #include "payload.h"
 #include "tcp.h"
 #include "functions.h"
+#include "xmlfunctions.h"
 //#include "wiringPi.h"
 
 typedef enum eDevState
@@ -514,46 +515,6 @@ int DeinitPollMode()
 	return res;
 }
 
-int SnepPush(unsigned char* msgToPush, unsigned int len)
-{
-	int res = 0x00;
-	
-	framework_LockMutex(g_devLock);
-	framework_LockMutex(g_SnepClientLock);
-	
-	if(eSnepClientState_READY != g_SnepClientState && eSnepClientState_EXIT!= g_SnepClientState && eDevState_PRESENT == g_DevState)
-	{
-		framework_UnlockMutex(g_devLock);
-		g_SnepClientState = eSnepClientState_WAIT_READY;
-		framework_WaitMutex(g_SnepClientLock, 0);
-	}
-	else
-	{
-		framework_UnlockMutex(g_devLock);
-	}
-	
-	if(eSnepClientState_READY == g_SnepClientState)
-	{
-		framework_UnlockMutex(g_SnepClientLock);
-		res = nfcSnep_putMessage(msgToPush, len);
-		
-		if(0x00 != res)
-		{
-			printf("\t\tPush Failed\n");
-		}
-		else
-		{
-			printf("\t\tPush successful\n");
-		}
-	}
-	else
-	{
-		framework_UnlockMutex(g_SnepClientLock);
-	}
-	
-	return res;
-}
-
 int WriteTag(nfc_tag_info_t TagInfo, unsigned char* msgToPush, unsigned int len)
 {
 	int res = 0x00;
@@ -793,40 +754,28 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 
 /* assuming decrypted pl, takes payload string pl, extracts info into payload struct, 
 subtracts diff from balance, writes new encrypted payload with new balance to card,
-sends update to databse*/
+sends update to database*/
 void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta, int kiosk)
 {
+	/* split payload into strings*/
+
 	char cid[9];
 	char dev;
 	char valid;
 	char balance[9];
 	char timestamp[15];
-
-	/* split payload into strings*/
-	strncpy(cid, pl, 8);
+	sscanf(pl, "%8c%c%c%8c%s", cid, &dev, &valid, balance, timestamp);
 	cid[8] = '\0';
-
-	dev = pl[8];
-
-	valid = pl[9];
-
-	strncpy(balance, pl+10, 8);
 	balance[8] = '\0';
-
-	strncpy(timestamp, pl+18, 14);
 	timestamp[14] = '\0';
+	printf("Payload: %s %c %c %s %s\n", cid, dev, valid, balance, timestamp);
 
 	/* convert to proper data types*/
 	payload *p = malloc(sizeof(payload));
 	p->cid = (int)strtol(cid, NULL, 16);
 	p->dev = dev;
 	p->valid = valid;
-	
-	int num;
-	sscanf(balance, "%x", &num);
-	p->balance = *((float*)&num);
-
-
+	p->balance = hexStrToFloat(balance, &(p->balance));
 	strncpy(p->timestamp, timestamp, 14);
 	printf("CID/Dev/Valid/Balance/Timestamp:\n");
 	printf("%i\n%c\n%c\n%f\n%s\n", p->cid, p->dev, p->valid, p->balance, p->timestamp);
@@ -838,14 +787,11 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	unsigned int NDEFMsgLen = 0x00;
 	if ((dev == '0') && (valid == '1'))
 	{
-
-		//TODO: update timestamp
-		//if time difference is more than 1 hr 15, charge balance and write new time stamp
+		//if time difference is more than 1 hr 15 (4500s), charge balance and write new time stamp
 		//else no charge
 		double diffTime = 0;
 		if (kiosk == 0)
 		{
-			char* buf[BUFSIZE];
 			diffTime = comparePLTime(p->timestamp);
 			printf("Time diff (s) %f\n", diffTime);
 			if (diffTime > 4500 || TRANSFERSOFF)
@@ -858,7 +804,6 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				struct tm* tm_new;
 				tm_new = localtime(&cur_t);
 				createPLTime(tm_new, buf);
-				printf("ayay%s\n", buf);
 
 				printf("Change in balance: %f\n", delta);
 				p->balance += delta;
@@ -868,7 +813,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				char resp[strlen(pl)];
 				strcpy(resp, pl);
 				strncpy(resp+10, balance, 8);
-				//strncpy(resp+18, buf, 14);
+				strncpy(resp+18, buf, 14);
 				resp[strlen(pl)] = '\0';
 
 				printf("Writing new balance: %f...\n", f);
@@ -895,7 +840,15 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			
 			if (MESSAGESON)
 			{
-				sendMessageToServer(hostname, port, msgBuf);
+				if(sendMessageToServer(hostname, port, msgBuf)<1)
+				{
+					printf("No connection to database\n");
+				}
+				else if (CACHING)
+				{
+					getFullCache(HOSTNAME, port);	
+				}
+				
 			}
 			else
 			{
@@ -910,8 +863,9 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 			printf("Change in balance: %f\n", delta);
 			p->balance += delta;
+
 			float f = p->balance;
-			sprintf(balance, "%X", *((int*)&f) );
+			floatToHexStr(f, balance);
 
 			char resp[strlen(pl)];
 			strcpy(resp, pl);
@@ -934,6 +888,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		printf("Invalid\n");
 		//TODO: Red LED
 	}
+	free(p);
 }
 
 /*init card with cid and balance*/
@@ -944,14 +899,7 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 
 	//timestamp should be current time;
 
-	char buf[BUFSIZE];
-	time_t cur_t;
-	time(&cur_t);
-	struct tm* tm_new;
-	tm_new = localtime(&cur_t);
-	createPLTime(tm_new, buf);
-	printf("Timestamp: %s %d\n", buf, strlen(buf));
-
+	char* buf = "19700101101010";
 
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
@@ -980,24 +928,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 {
 	int res = 0x00;
 	unsigned int i = 0x00;
-	//int block = 0x15;
-	//unsigned char key[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	//ndef_info_t NDEFinfo;
 	eDevType DevTypeBck = eDevType_NONE;
-	/*Cmd Mifare Auth Key A : 0x60U*/
-	// unsigned char MifareAuthCmd[12] = {0x60U, 0x00 /*block*/, 0x02, 0x02, 0x02, 0x02, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/, 0x00 /*key*/ , 0x00 /*key*/, 0x00 /*key*/};
-	// unsigned char MifareAuthResp[255];
-	// unsigned char MifareAuthRespOK[2] = {0x40, 0x00};
-	// unsigned char MifareAuthRespKO[2] = {0x40, 0x03};
-	// /*Cmd Mifare Read 16 : 0x30U*/
-	// unsigned char MifareReadCmd[2] = {0x30U,  /*block*/ 0x00};
-	// unsigned char MifareReadResp[255];
-	
-	//nfc_tag_info_t TagInfo;
-	
-	// MifareAuthCmd[1] = block;
-	// memcpy(&MifareAuthCmd[6], key, 6);
-	// MifareReadCmd[1] = block;
 
 	/* vars for kiosk mode (0x06)*/
 	int n;
@@ -1009,13 +940,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	int clientfd;
 	int port = 5556;
 	int connected = 0;
-	//UNCOMMENT message[BUFSIZE] AND COMMENT OUT message = "etc...." IF TESTING TCP
 	char message[BUFSIZE];
-	//command from GUI converted from bytes
-	//char* message = "0FFFFFFFF"; // 0 for init, FFFFFFFF for cid
-	//char* message = "142c80000";//1 for add, 42c80000 ($100) for Balance?;
-	//char* message = "12.50";
-	//char* message = "02147483647";
+	
+
 	if (MESSAGESON && REQTIME)
 	{
 		printf("Updating time from database...\n");
@@ -1024,40 +951,33 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		char hostname[] = HOSTNAME;
 		char* msgParam = malloc(BUFSIZE);
 		strcpy(msgBuf, createGetTime(msgBuf));
-		sendMessageToServer(hostname, port, msgBuf);
-		char dbTime[23];
-		strncpy(dbTime, "\"", 1);
-		strncpy(dbTime+1, msgBuf+1, 20);
-		strncpy(dbTime+21, "\"", 1);
-		dbTime[23] = '\0';
-		printf("Time: %s\n", dbTime);
-		char cmd[BUFSIZE] = "sudo date -s ";
-		strcat(cmd, dbTime);
-		printf("%s\n",cmd);
-		printf("Setting system time...\n");
-		system(cmd);
-
-	}
-	if (0x05 == mode && CACHING)
-	{
-		//TODO: ask for database cache
-		printf("Requesting database cache...\n");
-		char msgBuf[BUFSIZE];
-		int port = DBPORT;
-		char hostname[] = HOSTNAME;
-		char* msgParam = malloc(BUFSIZE);
-		strcpy(msgBuf, createGetEntryAll(msgBuf));
-		
-		if (MESSAGESON)
+		if(sendMessageToServer(hostname, port, msgBuf)<1)
 		{
-			sendMessageToServer(hostname, port, msgBuf);
-
+			printf("No connection to database\n");
 		}
 		else
 		{
-			printf("MESSAGES OFF: NOT SENDING\n");	
+			char dbTime[23];
+			strncpy(dbTime, "\"", 1);
+			strncpy(dbTime+1, msgBuf+1, 20);
+			strncpy(dbTime+21, "\"", 1);
+			dbTime[22] = '\0';
+			printf("Time: %s\n", dbTime);
+			char cmd[BUFSIZE] = "sudo date -s ";
+			strcat(cmd, dbTime);
+			printf("%s\n",cmd);
+			printf("Setting system time...\n");
+			system(cmd);
+			
 		}
-
+		free(msgParam);
+	}
+	if (0x05 == mode && CACHING)
+	{
+		int port = DBPORT;
+		char hostname[] = HOSTNAME;
+		getFullCache(HOSTNAME, port);
+		//parseDoc("cache.xml");
 	}
 	if (0x06 == mode)
 	{
@@ -1089,9 +1009,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			      close(clientfd);
 			      connected = 0;
 			      printf("Disconnected from client.\n");
-			    }//error("ERROR reading from socket");
+			    }
 			    printf("Server received %d bytes: %s \n", n, message);
-
 
 				// blocks while waiting for GUI
 
@@ -1259,7 +1178,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						//BUS SCANNER MODE
 
-
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 
 						encrypt(pl, KEY, PL_LEN);
@@ -1322,6 +1240,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							}
 							else if (NDEFinfo.current_ndef_length == PL_LEN + 7)
 							{
+								//properly formatted
 								printf("Checking card...\n");
 								char cid[9];
 						        char dev;
@@ -1384,6 +1303,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						}
 						else if (cmd == '2')
 						{
+							//initialize card
 							if (NDEFinfo.current_ndef_length == 7 + strlen(FORMAT_BLANK)) // if blank
 							{
 								printf("Initializing card...");
@@ -1418,11 +1338,11 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							{
 								//don't overwrite
 								printf("Error: Card already initilized.\n" );
-								//give option to erase?
 							}
 						}
 						else if (cmd == '3')
 						{
+							//Update balance on card
 							printf("Adding balance to card...\n");
 							char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 							encrypt(pl, KEY, PL_LEN);
@@ -1438,15 +1358,14 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
     						end[1] = '\0';
 							write(clientfd, end, strlen(end));
 
-						}
-						//else if etc....		
+						}	
 						kioskWait = 1;
 					}
 				}
 				else
 				{
 
-					//HCE SCANNER
+					//HCE BUS SCANNER
 					printf("\t\tNDEF Content : NO\n");
 					
 					unsigned char SelectAIDCommand[10] = {0x00, 0xA4, 0x04, 0x00, 0x05, 0x01, 0x23, 0x45, 0x67, 0x89};
@@ -1459,6 +1378,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					char cidstr[BUFSIZE];
 					char dev;
 					char valid;
+					char balance[BUFSIZE];
+					char timestamp[BUFSIZE];
 					if(0x00 == res)
 					{
 					printf("\n\t\tRAW APDU transceive failed\n");
@@ -1472,32 +1393,86 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								printf("%02X ", SelectAIDResponse[i]);
 							}
 							printf("\n\n");
-							//TODO: decrypt
 	    					encrypt(SelectAIDResponse, KEY, PL_LEN);
-	    					sscanf(SelectAIDResponse, "%8c%c%c", cidstr, &dev, &valid);
+	    					sscanf(SelectAIDResponse, "%8c%c%c%8c%s", cidstr, &dev, &valid, balance, timestamp);
 	    					cidstr[8] = '\0';
-	    					printf("CID STRING:%s DEV:%c VALID:%c\n",cidstr,dev,valid);
+	    					balance[8] = '\0';
+	    					timestamp[14] = '\0';
+	    					printf("CID STRING:%s DEV:%c VALID:%c BAL:%s TIME:%s\n",cidstr,dev,valid, balance, timestamp);
+
 					}
-					if ((dev == '1') && (valid == '1')){ 
-					printf("Updating database...\n");
-					char msgBuf[BUFSIZE];
-					int port = DBPORT;
-					char hostname[] = HOSTNAME;
-					int cidint;
-    					cidint = (int)strtol(cidstr, NULL, 16);
-					char* msgParam = malloc(BUFSIZE);
-					strcpy(msgBuf, createBalanceUpdate(cidint, FEE, msgParam));
-					
-					if (MESSAGESON)
+
+					if ((dev == '1') && (valid == '1'))
 					{
-						sendMessageToServer(hostname, port, msgBuf);
-					}
-					else
-					{
-						printf("MESSAGES OFF: NOT SENDING\n");
-					}
-					
-					free(msgParam);					
+						char msgBuf[BUFSIZE];
+						int port = DBPORT;
+						char hostname[] = HOSTNAME;
+						int cidint;
+	    				cidint = (int)strtol(cidstr, NULL, 16);
+						char* msgParam = malloc(BUFSIZE);
+						strcpy(msgBuf, createGetLastUpdate(cidint, msgParam));
+						printf("HOSTNAME: %s\n", hostname);
+						if (MESSAGESON)
+						{
+							char tsbuf[BUFSIZE];
+							printf("Getting timestamp from database...\n");
+							if(sendMessageToServer(hostname, port, msgBuf)<1)
+							{
+								printf("No connection to database\n");
+							}
+							else
+							{
+								msgBuf[19] = '\0';
+								printf("Reponse: %s\n", msgBuf);
+								struct tm tmlu;
+    							strptime(msgBuf, DATETSFORMAT, &tmlu);
+    							createPLTime(&tmlu, tsbuf);
+    							strncpy(timestamp, tsbuf, 14);
+							}
+						}
+						else
+						{
+							printf("MESSAGES OFF: NOT SENDING\n");
+						}
+						//if time difference is more than 1 hr 15 (4500s), charge balance
+						double diffTime = 0;
+						float delta = FEE;
+						diffTime = comparePLTime(timestamp);
+						printf("Time diff (s) %f\n", diffTime);
+						if (diffTime > 4500 || TRANSFERSOFF)
+						{
+							printf("Transfer expired, charging phone and setting new timestamp...\n");
+
+						}
+						else
+						{
+							printf("Transfer still valid, not charging card, not changing timestamp...\n");
+							delta = 0;		
+
+						}
+						printf("Updating database...\n");
+						bzero(msgBuf, BUFSIZE);
+						bzero(msgParam, BUFSIZE);
+						strcpy(msgBuf, createBalanceUpdate(cidint, delta, msgParam));
+
+						if (MESSAGESON)
+						{
+							if(sendMessageToServer(hostname, port, msgBuf)<1)
+							{
+								printf("No connection to database\n");
+							}
+							else if (CACHING)
+							{
+								getFullCache(HOSTNAME, port);	
+							}
+							
+						}
+						else
+						{
+							printf("MESSAGES OFF: NOT SENDING\n");
+						}
+						
+						free(msgParam);					
 					}
 					else{
 						printf("Error: phone not valid device\n");
@@ -1508,13 +1483,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			else if(eDevType_P2P == g_Dev_Type)/*P2P Detected*/
 			{
 				framework_UnlockMutex(g_devLock);
- 				printf("\tDevice Found\n");
+ 				printf("\tDevice Found\n");	
 				
-				if(2 == mode)
-				{
-					SnepPush(msgToSend, len);
-				}
-				
+				//TODO: LED (p2p)
 				framework_LockMutex(g_SnepClientLock);
 	
 				if(eSnepClientState_READY == g_SnepClientState)
@@ -2049,11 +2020,6 @@ void cmd_bus(int arg_len, char** arg)
 		
 		if(0x00 == res)
 		{
-			//res = BuildNDEFMessage(arg_len, arg, &NDEFMsg, &NDEFMsgLen);
-		}
-		
-		if(0x00 == res)
-		{
 			WaitDeviceArrival(0x05, NDEFMsg, NDEFMsgLen);
 		}
 		
@@ -2092,11 +2058,6 @@ void cmd_kiosk(int arg_len, char** arg)
 	else
 	{
 		res = InitMode(0x01, 0x01, 0x00);
-		
-		if(0x00 == res)
-		{
-			//res = BuildNDEFMessage(arg_len, arg, &NDEFMsg, &NDEFMsgLen);
-		}
 		
 		if(0x00 == res)
 		{
