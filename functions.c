@@ -35,7 +35,7 @@ float hexStrToFloat(char* str, float* f)
 
 char* floatToHexStr(float f, char* str)
 {
-    sprintf(str, "%08x", *((int*)&f) );
+    sprintf(str, "%08x", *((int*)&f));
     
     return str;
 }
@@ -85,7 +85,7 @@ char* createPLTime(struct tm* new_t, char* buf)
     strftime(temp, sizeof(temp), DATEPLFORMAT, new_t);
     strcpy(buf, temp);
     buf[15] = '\0';
-    printf("New timestamp: %s\n", buf);
+    printf("PL timestamp: %s\n", buf);
     
     return buf;
 }
@@ -101,4 +101,25 @@ double comparePLTime(char* timestamp)
     diff = difftime(end_t,pl_t);
     
     return diff;
+}
+
+void getFullCache(char* hostname, int port)
+{
+    printf("Requesting database cache...\n");
+    char msgBuf[BUFSIZE];
+    char* msgParam = malloc(BUFSIZE);
+    strcpy(msgBuf, createGetEntryAll(msgBuf));
+    
+    if (MESSAGESON)
+    {
+        if(sendMessageToServer(hostname, port, msgBuf)<1)
+        {
+            printf("No connection to database\n");
+        }
+    }
+    else
+    {
+        printf("MESSAGES OFF: NOT SENDING\n");  
+    }
+    free(msgParam);
 }
