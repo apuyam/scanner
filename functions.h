@@ -1,8 +1,9 @@
 #define KEY "GHIJKLMNOPQRSTUVWXYZYXWVUTSRQPON"
+#define INITDATE "19700101101010"
 #define DATEFORMAT "%b %d %Y %H:%M:%S"
 #define DATEPLFORMAT "%Y%m%d%H%M%S"
 #define DATETSFORMAT "%Y-%m-%d %H:%M:%S"
-#define TRANSFERSOFF 0
+#define TRANSFERSOFF 1
 
 char* encrypt(char* input, char* key, int inputlen);
 
@@ -38,4 +39,5 @@ char* createPLTime(struct tm* new_t, char* buf);
 Returns difference (curr-timestamp) in seconds*/
 double comparePLTime(char* timestamp);
 
+/*Retrieves all database entries from DB and stores in cache.xml*/
 void getFullCache(char* hostname, int port);

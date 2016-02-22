@@ -134,6 +134,10 @@ int sendMessageToServer(char* hostname, int port, char* buf)
     }
     if (success)
     {
+      int arg;
+      arg = fcntl(sockfd, F_GETFL, NULL); 
+      arg &= (~O_NONBLOCK); 
+      fcntl(sockfd, F_SETFL, arg); 
       printf("%s\n", buf);
 
       write(sockfd, LOGIN, strlen(LOGIN));
@@ -213,7 +217,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
         //write cache response to file
          printf("Awaiting database cache...\n");
          FILE *fw;
-         fw = fopen("cache.xml", "w");
+         fw = fopen(CACHEFILE, "w");
          char foo[2];
          foo[1] = '\0';
          int start = 0;
@@ -229,8 +233,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
                   start = 1;
                 if(foo[0] != (char)-128 && start)
                     fputc(foo[0], fw);
-                    fputc(foo[0], stdout);
-                fflush(stdout);
+                    fflush(stdout);
 
              }
 
