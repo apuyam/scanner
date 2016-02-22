@@ -73,7 +73,7 @@ char* intToStr(int i, char* str)
 
 char* floatToStr(float f, char* str)
 {
-    sprintf(str, "%f", f);
+    sprintf(str, "%.2f", f);
     str[strlen(str)] = '\0';
 
     return str;

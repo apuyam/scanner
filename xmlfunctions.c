@@ -7,51 +7,6 @@
 #include <libxml/parser.h>
 #include "xmlfunctions.h"
 
-void parseCustomer (xmlDocPtr doc, xmlNodePtr cur) {
-
-	xmlChar *key;
-	cur = cur->xmlChildrenNode;
-	while (cur != NULL) {
-	    if ((!xmlStrcmp(cur->name, (const xmlChar *)"CID"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"Valid"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"Dev"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"Balance"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"Email"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"Valid"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-            else if ((!xmlStrcmp(cur->name, (const xmlChar *)"LastUpdated"))) {
-		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    printf("%s %s\n",(const xmlChar*)cur->name, key);
-		    xmlFree(key);
- 	    }
-	cur = cur->next;
-	}
-    return;
-}
-
 void updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
 {
         xmlChar *key;
@@ -116,67 +71,63 @@ void getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
         return;
 }
 
-void parseDoc(char *docname) {
+void xmlWrapper(char* docname, int func, char* cid, char* val, char* buf)
+{
+    xmlDocPtr doc;
+    xmlNodePtr cur;
+    doc = xmlParseFile(docname);
+    if (doc == NULL ) {
+            fprintf(stderr,"Document not parsed successfully. \n");
+            return;
+    }
 
-	xmlDocPtr doc;
-	xmlNodePtr cur;
-        //char* test = "<Data><Customer><CID>158358493</CID><Valid>1</Valid><Dev>0</Dev><Balance>65</Balance><Email>villard@myumanitoba.ca</Email><LastUpdated>2016-01-29 10:45:51.0</LastUpdated></Customer></Data>";
-	doc = xmlParseFile(docname);
-	//doc = xmlParseMemory(test, 4096);
-	if (doc == NULL ) {
-		fprintf(stderr,"Document not parsed successfully. \n");
-		return;
-	}
-	
-	cur = xmlDocGetRootElement(doc);
-	
-	if (cur == NULL) {
-		fprintf(stderr,"empty document\n");
-		xmlFreeDoc(doc);
-		return;
-	}
-	
-	if (xmlStrcmp(cur->name, (const xmlChar *) "Data")) {
-		fprintf(stderr,"document of the wrong type, root node != Data");
-		xmlFreeDoc(doc);
-		return;
-	}
-	
-	cur = cur->xmlChildrenNode;
-	while (cur != NULL) {
-		if ((!xmlStrcmp(cur->name, (const xmlChar *)"Customer"))){
-			parseCustomer (doc, cur);
-                       printf("\n");
-		}
-		 
-           cur = cur->next;
-       
-       
-       }
-//         char buf[BUFSIZE];
-// //        cur = xmlDocGetRootElement(doc);
-// //        cur = cur->xmlChildrenNode;
-// //	while (cur != NULL) {
-// //		if ((!xmlStrcmp(cur->name, (const xmlChar *)"Customer"))){
-// //			updateEntry(doc, cur, "1044419670", "Balance", "333.25");
-// //		}
-// //		 
-// //            cur = cur->next;
-// //        
-// //        }
-//         bzero(buf, BUFSIZE);
-//         cur = xmlDocGetRootElement(doc);
-//         cur = cur->xmlChildrenNode;
-//         while (cur != NULL) {
-// 		if ((!xmlStrcmp(cur->name, (const xmlChar *)"Customer"))){
-// 			getEntry(doc, cur, "1044419670", "Balance", buf);
-// 		}
-		 
-//             cur = cur->next;
-        
-//         }
-//         printf("BUF: %s\n", buf);
-	xmlSaveFormatFile (docname, doc, 1);
-	xmlFreeDoc(doc);
-	return;
+    cur = xmlDocGetRootElement(doc);
+
+    if (cur == NULL) {
+            fprintf(stderr,"empty document\n");
+            xmlFreeDoc(doc);
+            return;
+    }
+
+    if (xmlStrcmp(cur->name, (const xmlChar *) "Data")) {
+            fprintf(stderr,"document of the wrong type, root node != Data");
+            xmlFreeDoc(doc);
+            return;
+    }
+    cur = cur->xmlChildrenNode;
+    while (cur != NULL) {
+            if ((!xmlStrcmp(cur->name, (const xmlChar *)"Customer"))){
+                if (func == 0)
+                {
+                    getEntry(doc, cur, cid, val, buf);
+                }
+                else if (func == 1)
+                {
+                    updateEntry(doc, cur, cid, val, buf);
+                }
+
+            }
+
+        cur = cur->next;
+
+    }
+    xmlSaveFormatFile (docname, doc, 1);
+    xmlFreeDoc(doc);
+    
+}
+
+void xmlUpdateBalance(char* docname, char* cid, float delta)
+{
+    char* buf = malloc(BUFSIZE);
+    xmlWrapper(docname, 0, cid, "Balance", buf);
+	printf("%s\n", buf);
+    float bal;
+    strToFloat(buf, &bal);
+    bal += delta;
+    floatToStr(bal, buf);
+	printf("%s\n", buf);
+    xmlWrapper(docname, 1, cid, "Balance", buf);
+
+    printf("%s\n", buf);
+    free(buf);
 }

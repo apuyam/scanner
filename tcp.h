@@ -5,9 +5,10 @@
 #define GUIPORT 5556
 #define FORMAT_BLANK "0101"
 #define LOGIN "scanner Capstone2015Scanner"
+#define CACHEFILE "cache.xml"
 #define MESSAGESON 1
-#define CACHING 0
-#define REQTIME 0
+#define CACHING 1
+#define REQTIME 1
 #define BUFSIZE 512
 #define TIMEOUTSEC 3
 
@@ -43,6 +44,8 @@ char* createGetEntryAll(char* msgParam);
 "7" and stores it in msgParam*/
 char* createGetTime(char* msgParam);
 
+/* create message to send to database of form
+"10 cid" and stores it in msgParam*/
 char* createGetLastUpdate(int cid, char* msgParam);
 
 /*Example:

@@ -27,7 +27,9 @@
 #include "tcp.h"
 #include "functions.h"
 #include "xmlfunctions.h"
+#include "list.h"
 //#include "wiringPi.h"
+
 
 typedef enum eDevState
 {
@@ -87,6 +89,7 @@ static nfcSnepServerCallback_t g_SnepServerCB;
 static nfcSnepClientCallback_t g_SnepClientCB;
 unsigned char *HCE_data = NULL;
 unsigned int HCE_dataLenght = 0x00;
+static list DBREQS;
 
 
 void help(int mode);
@@ -758,7 +761,7 @@ sends update to database*/
 void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta, int kiosk)
 {
 	/* split payload into strings*/
-
+	int enoughBalance = 1;
 	char cid[9];
 	char dev;
 	char valid;
@@ -785,6 +788,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
+
 	if ((dev == '0') && (valid == '1'))
 	{
 		//if time difference is more than 1 hr 15 (4500s), charge balance and write new time stamp
@@ -808,19 +812,28 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				printf("Change in balance: %f\n", delta);
 				p->balance += delta;
 				float f = p->balance;
-				sprintf(balance, "%X", *((int*)&f) );
+				sprintf(balance, "%X", *((int*)&f));
 
-				char resp[strlen(pl)];
-				strcpy(resp, pl);
-				strncpy(resp+10, balance, 8);
-				strncpy(resp+18, buf, 14);
-				resp[strlen(pl)] = '\0';
+				if (p->balance < 0)
+				{
+					printf("Invalid: not enough balance for transaction.\n");
+					enoughBalance = 0;
+				}
+				else
+				{
+					char resp[strlen(pl)];
+					strcpy(resp, pl);
+					strncpy(resp+10, balance, 8);
+					strncpy(resp+18, buf, 14);
+					resp[strlen(pl)] = '\0';
 
-				printf("Writing new balance: %f...\n", f);
+					printf("Writing new balance: %f...\n", f);
 
-				printf("New payload: %s \n", resp);
-				encrypt(resp, KEY, PL_LEN);
-				writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+					printf("New payload: %s \n", resp);
+					encrypt(resp, KEY, PL_LEN);
+					writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+				}
+
 
 			}
 			else
@@ -829,32 +842,70 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				delta = 0;		
 
 			}
-			printf("Updating database..");
-
-			char msgBuf[BUFSIZE];
-			int port = DBPORT;
-			char hostname[] = HOSTNAME;
-
-			char* msgParam = malloc(BUFSIZE);
-			strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
-			
-			if (MESSAGESON)
+			if (enoughBalance)
 			{
-				if(sendMessageToServer(hostname, port, msgBuf)<1)
-				{
-					printf("No connection to database\n");
-				}
-				else if (CACHING)
-				{
-					getFullCache(HOSTNAME, port);	
-				}
+				printf("Updating database..");
+
+				char msgBuf[BUFSIZE];
+				int port = DBPORT;
+				char hostname[] = HOSTNAME;
+
+				char* msgParam = malloc(BUFSIZE);
+				strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
 				
+				if (MESSAGESON)
+				{
+					int sendQ = 1;
+					if(sendMessageToServer(hostname, port, msgBuf)<1)
+					{
+						//no connection to DB, so update cache and queue update reqs
+						sendQ = 0;
+						printf("No connection to database\n");
+						char* balQ = malloc(BUFSIZE);
+						strcpy(balQ, msgBuf);
+						enqueue(&DBREQS, balQ);
+
+
+						char cidstr[BUFSIZE];
+        				intToStr(p->cid, cidstr);
+        				int firstDigit = 0;
+						while(cidstr[firstDigit] == '0')
+						{
+							firstDigit++;
+						}
+						char cidstrsmall[10 - firstDigit + 1];
+						strncpy(cidstrsmall, cidstr+firstDigit, 10 - firstDigit);
+						cidstrsmall[10 - firstDigit] = '\0';
+        				printf("%d %s %f\n",firstDigit, cidstrsmall, delta );
+						xmlUpdateBalance(CACHEFILE, cidstrsmall, delta);
+
+					}
+					else if (CACHING)
+					{
+						//update entire cache
+						sleep(1);
+						getFullCache(HOSTNAME, port);	
+					}
+					if (sendQ)
+					{
+						printf("Sending queued balance requests...");
+						while(DBREQS.size > 0)
+					    {
+					        node* qq = dequeue(&DBREQS);
+					        printf("Queued message: %s\nMessages left: %d\n", qq->data, DBREQS.size);
+					        sendMessageToServer(hostname, port, qq->data);
+					        free(qq->data);
+					        free(qq);
+					    }
+					}
+				}
+				else
+				{
+					printf("MESSAGES OFF: NOT SENDING\n");
+				}
+				free(msgParam);
 			}
-			else
-			{
-				printf("MESSAGES OFF: NOT SENDING\n");
-			}
-			free(msgParam);
+			
 		}
 		else
 		{
@@ -891,15 +942,11 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	free(p);
 }
 
-/*init card with cid and balance*/
+/*init card with cid and balance, timestamp set to 1970*/
 void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
 
 	printf("Initializing Card...\n\n");
-
-	//timestamp should be current time;
-
-	char* buf = "19700101101010";
 
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
@@ -907,8 +954,7 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 	strcpy(resp, cid);
 	char initString[] = "01432a000020151010242424";
 	strncpy(initString+2, balance, 8);
-	strncpy(initString+10, buf, 14);
-	//ffffffff01432a000020151010242424
+	strncpy(initString+10, INITDATE, 14);
 	strcpy(resp+8, initString);
 	resp[PL_LEN] = '\0';
 
@@ -977,7 +1023,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		int port = DBPORT;
 		char hostname[] = HOSTNAME;
 		getFullCache(HOSTNAME, port);
-		//parseDoc("cache.xml");
 	}
 	if (0x06 == mode)
 	{
@@ -1375,6 +1420,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 					memcpy(&TagInfo, &g_TagInfo, sizeof(nfc_tag_info_t));
 					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
+					int enoughBalance = 1;
 					char cidstr[BUFSIZE];
 					char dev;
 					char valid;
@@ -1404,6 +1450,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 					if ((dev == '1') && (valid == '1'))
 					{
+						//Get LastUpdated from DB to see if transfer valid
 						char msgBuf[BUFSIZE];
 						int port = DBPORT;
 						char hostname[] = HOSTNAME;
@@ -1411,14 +1458,36 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	    				cidint = (int)strtol(cidstr, NULL, 16);
 						char* msgParam = malloc(BUFSIZE);
 						strcpy(msgBuf, createGetLastUpdate(cidint, msgParam));
-						printf("HOSTNAME: %s\n", hostname);
 						if (MESSAGESON)
-						{
+						{	
 							char tsbuf[BUFSIZE];
 							printf("Getting timestamp from database...\n");
 							if(sendMessageToServer(hostname, port, msgBuf)<1)
 							{
 								printf("No connection to database\n");
+								//if no connection use cache timestamp
+								char* cacheTS = malloc(BUFSIZE);
+								int firstDigit = 0;
+								char cidintstr[BUFSIZE];
+	        					intToStr(cidint, cidintstr);
+								while(cidintstr[firstDigit] == '0')
+								{
+									firstDigit++;
+								}
+								char cidstrsmall[10 - firstDigit + 1];
+								strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
+								cidstrsmall[10 - firstDigit] = '\0';
+								xmlWrapper(CACHEFILE, 0, cidstrsmall, "LastUpdated", cacheTS);
+								
+								cacheTS[19] = '\0';
+								struct tm tmlu;
+    							strptime(cacheTS, DATEFORMAT, &tmlu);
+    							createPLTime(&tmlu, tsbuf);
+    							strncpy(timestamp, tsbuf, 14);
+								printf("CACHE TS %s\n", timestamp);
+
+								free(cacheTS);
+
 							}
 							else
 							{
@@ -1434,6 +1503,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						{
 							printf("MESSAGES OFF: NOT SENDING\n");
 						}
+
+
 						//if time difference is more than 1 hr 15 (4500s), charge balance
 						double diffTime = 0;
 						float delta = FEE;
@@ -1442,6 +1513,28 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						if (diffTime > 4500 || TRANSFERSOFF)
 						{
 							printf("Transfer expired, charging phone and setting new timestamp...\n");
+							//get balance from cache see if enough credit on account
+							char* bal = malloc(BUFSIZE);
+							int firstDigit = 0;
+							int cidint;
+	    					cidint = (int)strtol(cidstr, NULL, 16);
+	    					char cidintstr[BUFSIZE];
+        					intToStr(cidint, cidintstr);
+							while(cidintstr[firstDigit] == '0')
+							{
+								firstDigit++;
+							}
+							char cidstrsmall[10 - firstDigit + 1];
+							strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
+							cidstrsmall[10 - firstDigit] = '\0';
+							xmlWrapper(CACHEFILE, 0, cidstrsmall, "Balance", bal);
+							printf("Cid: %s Bal: %s\n",cidstrsmall, bal);
+							if(bal < 0)
+							{
+								printf("Invalid, not enough balance for transaction");
+								enoughBalance = 0;
+							}
+							free(bal);
 
 						}
 						else
@@ -1450,29 +1543,51 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							delta = 0;		
 
 						}
-						printf("Updating database...\n");
-						bzero(msgBuf, BUFSIZE);
-						bzero(msgParam, BUFSIZE);
-						strcpy(msgBuf, createBalanceUpdate(cidint, delta, msgParam));
 
-						if (MESSAGESON)
+						if (enoughBalance)
 						{
-							if(sendMessageToServer(hostname, port, msgBuf)<1)
+							printf("Updating database...\n");
+							bzero(msgBuf, BUFSIZE);
+							bzero(msgParam, BUFSIZE);
+							strcpy(msgBuf, createBalanceUpdate(cidint, delta, msgParam));
+
+							if (MESSAGESON)
 							{
-								printf("No connection to database\n");
+								int sendQ = 1;
+								if(sendMessageToServer(hostname, port, msgBuf)<1)
+								{
+									sendQ = 0;
+									printf("No connection to database\n");
+									char* balQ = malloc(BUFSIZE);
+									strcpy(balQ, msgBuf);
+									enqueue(&DBREQS, balQ);
+								}
+								else if (CACHING)
+								{
+									getFullCache(HOSTNAME, port);	
+								}
+								if (sendQ)
+								{
+									printf("Sending queued balance requests...");
+									while(DBREQS.size > 0)
+								    {
+								        node* qq = dequeue(&DBREQS);
+								        printf("Queued message: %s\nMessages left: %d\n", qq->data, DBREQS.size);
+								        sendMessageToServer(hostname, port, qq->data);
+								        free(qq->data);
+								        free(qq);
+								    }
+								}
+								
 							}
-							else if (CACHING)
+							else
 							{
-								getFullCache(HOSTNAME, port);	
+								printf("MESSAGES OFF: NOT SENDING\n");
 							}
 							
+							free(msgParam);	
 						}
-						else
-						{
-							printf("MESSAGES OFF: NOT SENDING\n");
-						}
-						
-						free(msgParam);					
+										
 					}
 					else{
 						printf("Error: phone not valid device\n");
@@ -2001,6 +2116,8 @@ void cmd_bus(int arg_len, char** arg)
 	int res = 0x00;
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
+
+	initList(&DBREQS);
 	
 	printf("#########################################################################################\n");
 	printf("##                                     G16 Capstone                                    ##\n");
