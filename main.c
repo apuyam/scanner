@@ -15,6 +15,8 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+ /*		Modified by Michael Apuya of Group 16 for University of Manitoba ECE '15-'16 
+  * 	NFC capstone project.*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -558,6 +560,7 @@ void PrintfNDEFInfo(ndef_info_t pNDEFinfo)
 	}
 }
 
+/*Modified from NXP's function.*/
 void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen)
 {
 	unsigned char* NDEFContent = NULL;
@@ -727,7 +730,7 @@ char* getPayload(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* 
 	return TextContent;
 }
 
-/* writes message resp to card */
+/*Added function. Writes message resp to card */
 void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, unsigned int NDEFMsgLen, ndef_info_t NDEFinfo)
 {
 	int res = 0x00;
@@ -755,9 +758,10 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 	}
 }
 
-/* assuming decrypted pl, takes payload string pl, extracts info into payload struct, 
+/* Added function. Assuming decrypted pl, takes payload string pl, extracts info into payload struct, 
 subtracts diff from balance, writes new encrypted payload with new balance to card,
-sends update to database*/
+sends update to database. kiosk indicates whether called from bus (0) or kiosk (1) modes.
+Not used for HCE app scanning.*/
 void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float delta, int kiosk)
 {
 	/* split payload into strings*/
@@ -775,10 +779,10 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 	/* convert to proper data types*/
 	payload *p = malloc(sizeof(payload));
-	p->cid = (int)strtol(cid, NULL, 16);
+	hexStrToInt(cid, &(p->cid));
 	p->dev = dev;
 	p->valid = valid;
-	p->balance = hexStrToFloat(balance, &(p->balance));
+	hexStrToFloat(balance, &(p->balance));
 	strncpy(p->timestamp, timestamp, 14);
 	printf("CID/Dev/Valid/Balance/Timestamp:\n");
 	printf("%i\n%c\n%c\n%f\n%s\n", p->cid, p->dev, p->valid, p->balance, p->timestamp);
@@ -808,6 +812,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				struct tm* tm_new;
 				tm_new = localtime(&cur_t);
 				createPLTime(tm_new, buf);
+				strcpy(p->timestamp, buf);
 
 				printf("Change in balance: %f\n", delta);
 				p->balance += delta;
@@ -823,7 +828,9 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				{
 					char resp[strlen(pl)];
 					strcpy(resp, pl);
+					//write new balance to card
 					strncpy(resp+10, balance, 8);
+					//write new timestamp to card
 					strncpy(resp+18, buf, 14);
 					resp[strlen(pl)] = '\0';
 
@@ -832,6 +839,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 					printf("New payload: %s \n", resp);
 					encrypt(resp, KEY, PL_LEN);
 					writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+					//TODO: done writing here
 				}
 
 
@@ -839,7 +847,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			else
 			{
 				printf("Transfer still valid, not charging card, not changing timestamp...\n");
-				delta = 0;		
+				delta = 0; //create balance update of 0;
 
 			}
 			if (enoughBalance)
@@ -865,7 +873,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 						strcpy(balQ, msgBuf);
 						enqueue(&DBREQS, balQ);
 
-
+						//convert hex cid to int str, removing leading zeroes (for xml)
 						char cidstr[BUFSIZE];
         				intToStr(p->cid, cidstr);
         				int firstDigit = 0;
@@ -877,22 +885,35 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 						strncpy(cidstrsmall, cidstr+firstDigit, 10 - firstDigit);
 						cidstrsmall[10 - firstDigit] = '\0';
         				printf("%d %s %f\n",firstDigit, cidstrsmall, delta );
+
+        				//write new balance and timestamp in cache
 						xmlUpdateBalance(CACHEFILE, cidstrsmall, delta);
+						//update timestamp in cache (if delta != 0)
+						if(delta != 0)
+						{
+							struct tm ts;
+							strptime(p->timestamp, DATEPLFORMAT, &ts);
+					        char temp[BUFSIZE];
+					        strftime(temp, sizeof(temp), DATEFORMAT, &ts);
+					        temp[20] = '\0';    
+					        xmlWrapper(CACHEFILE, 1, cidstrsmall, "LastUpdated", temp);
+						}
 
 					}
 					else if (CACHING)
 					{
 						//update entire cache
-						sleep(1);
+						sleep(1); // test this
 						getFullCache(HOSTNAME, port);	
 					}
 					if (sendQ)
 					{
+						//assume connection still valid from earlier, send queued updates
 						printf("Sending queued balance requests...");
 						while(DBREQS.size > 0)
 					    {
 					        node* qq = dequeue(&DBREQS);
-					        printf("Queued message: %s\nMessages left: %d\n", qq->data, DBREQS.size);
+					        printf("Queued message: %s\nMessages left: %d\n", (char*)qq->data, DBREQS.size);
 					        sendMessageToServer(hostname, port, qq->data);
 					        free(qq->data);
 					        free(qq);
@@ -928,6 +949,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			printf("New payload: %s \n", resp);
 			encrypt(resp, KEY, PL_LEN);
 			writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
+			//TODO: done writing here.
 		}
 
 
@@ -942,7 +964,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	free(p);
 }
 
-/*init card with cid and balance, timestamp set to 1970*/
+/*Added function. Init card with cid and balance, timestamp set to 1970*/
 void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
 
@@ -952,9 +974,9 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 	unsigned int NDEFMsgLen = 0x00;
 	char resp[PL_LEN+1];
 	strcpy(resp, cid);
-	char initString[] = "01432a000020151010242424";
-	strncpy(initString+2, balance, 8);
-	strncpy(initString+10, INITDATE, 14);
+	char initString[] = "01432a000020151010242424"; //placeholder string
+	strncpy(initString+2, balance, 8);	//copy balance to payload string
+	strncpy(initString+10, INITDATE, 14); //placeholder timestamp from 1970/1/1
 	strcpy(resp+8, initString);
 	resp[PL_LEN] = '\0';
 
@@ -966,9 +988,15 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 	encrypt(resp, KEY, PL_LEN);
 	printf("Decrypted payload: %s length %d\n", resp, strlen(resp));
 
+	//TODO: writing finished
 	printf("\nWriting finished.\n");
 }
 
+/*Modified from NXP's version to include bus and kiosk modes.
+First attempts time/cache sync with database. 
+In bus mode, reads and writes card/HCE payloads, updates database over TCP.
+In kiosk mode, waits for commands from kiosk UI over TCP IPC before reading a card
+and responding to the kiosk with desired info.*/
 /*mode = 1 => poll mode = 2 => push mode = 3 => ndef write 4 => HCE*/
 int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 {
@@ -979,18 +1007,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	/* vars for kiosk mode (0x06)*/
 	int n;
 	int kioskWait = 1;
-	char cmd;
-	char argu[BUFSIZE];
-	char argb[BUFSIZE];
-	int serverfd;
-	int clientfd;
-	int port = 5556;
+	char cmd; //first byte from GUI
+	char argu[BUFSIZE]; //first param (cid or balance)
+	char argb[BUFSIZE]; //second param (init card balance)
+	int serverfd = -1;
+	int clientfd = -1;
+	int port = GUIPORT; //TODO: clean these names
 	int connected = 0;
 	char message[BUFSIZE];
 	
 
 	if (MESSAGESON && REQTIME)
 	{
+		//sync system time with DB time
 		printf("Updating time from database...\n");
 		char msgBuf[BUFSIZE];
 		int port = DBPORT;
@@ -1020,9 +1049,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	}
 	if (0x05 == mode && CACHING)
 	{
-		int port = DBPORT;
-		char hostname[] = HOSTNAME;
-		getFullCache(HOSTNAME, port);
+		//sync cache with DB info
+		getFullCache(HOSTNAME, DBPORT);
 	}
 	if (0x06 == mode)
 	{
@@ -1080,7 +1108,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					}
 					if(cmd == '2')
 					{
-						//extract balance from message and save in argb
+						//in the case of init card, extract balance from message and save in argb
 						strcpy(argb, message+11);
 						argb[strlen(argb)] = '\0';
 					}
@@ -1248,17 +1276,18 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							unsigned char * NDEFMsg = NULL;
 							unsigned int NDEFMsgLen = 0x00;
 							char blank[] = FORMAT_BLANK;
+							//write "blank" string to card
 							encrypt(blank, KEY, strlen(FORMAT_BLANK));
 							writeMessage(blank, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
 							n = write(clientfd, "ack0", strlen("ack0"));
     							if (n < 0) 
-      								error("ERROR writing to socket");
+      								error("Error: writing");
       						char end[BUFSIZE];
     						end[0] = (char)-128;
     						end[1] = '\0';
 							n = write(clientfd, end, strlen(end));
 							if (n < 0)
-        							error("ERROR writing to socket");
+        							error("Error: writing");
 						}
 						else if (cmd == '1')
 						{
@@ -1269,23 +1298,23 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							char blankCompare[strlen(FORMAT_BLANK)+1];
 							strncpy(blankCompare, pl, strlen(FORMAT_BLANK));
 							blankCompare[strlen(FORMAT_BLANK)] = '\0';
+							//compare read payload to expected "blank" string
 							if (strcmp(blankCompare, FORMAT_BLANK) == 0)
 							{
 								printf("Verified blank card...\n");
-								//send "12"
 								n = write(clientfd, "ack12", strlen("ack12"));
     							if (n < 0) 
-      								error("ERROR writing to socket");
+      								error("Error: writing");
       							char end[BUFSIZE];
     							end[0] = (char)-128;
     							end[1] = '\0';
 							    n = write(clientfd, end, strlen(end));
 							    if (n < 0)
-        							error("ERROR writing to socket");
+        							error("Error: writing");
 							}
 							else if (NDEFinfo.current_ndef_length == PL_LEN + 7)
 							{
-								//properly formatted
+								//assume proper length is properly formatted
 								printf("Checking card...\n");
 								char cid[9];
 						        char dev;
@@ -1298,24 +1327,25 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
     							timestamp[14] = '\0';
         						printf("Payload: %s %c %c %s %s\n", cid, dev, valid, balance, timestamp);
 
-
+        						//get CID
         						int cidint;
-        						cidint = hexStrToInt(cid, &cidint);
+        						hexStrToInt(cid, &cidint);
         						char cidstr[BUFSIZE];
         						intToStr(cidint, cidstr);
-
+        						//get valid
         						char validstr[2];
         						validstr[0] = valid;
         						validstr[1] = '\0';
-
+        						//get balance
         						float balfloat;
-        						balfloat = hexStrToFloat(balance, &balfloat);
+        						hexStrToFloat(balance, &balfloat);
         						char balstr[BUFSIZE];
         						floatToStr(balfloat, balstr);
         						char end[BUFSIZE];
     							end[0] = (char)-128;
     							end[1] = '\0';
 							    
+							    //ack with cid, valid, and balance
 							    printf("CID: %s VALID: %s BAL: %s\n", cidstr, validstr, balstr);
 
 							    char resp1[BUFSIZE];
@@ -1328,17 +1358,17 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							    printf("Sending ack: %s\n", resp1);
 							    n = write(clientfd, resp1, strlen(resp1));
         						if (n < 0)
-        							error("ERROR writing to socket");
+        							error("Error: writing");
 
 
 							}
 							else
 							{
-								// incorrectly formatted
+								//assume any other case is incorrectly formatted
 								printf("Incorrectly formatted card...\n");	
 								n = write(clientfd, "ack11", strlen("ack11"));
     							if (n < 0) 
-      								error("ERROR writing to socket");
+      								error("Error: writing");
       							char end[BUFSIZE];
     							end[0] = (char)-128;
     							end[1] = '\0';
@@ -1348,10 +1378,12 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						}
 						else if (cmd == '2')
 						{
-							//initialize card
+							//initialize card with CID and balance from argu and arb
 							if (NDEFinfo.current_ndef_length == 7 + strlen(FORMAT_BLANK)) // if blank
 							{
 								printf("Initializing card...");
+
+								//convert CID to hex
 								char argcid[10];
 								strncpy(argcid, argu, 10);
 								int cid;
@@ -1361,19 +1393,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								intToHexStr(cid, cidhex);
 								printf("HEXSTR: %s\n", cidhex);
 								   
+								//convert balance to hex
 								float balance;
 								strToFloat(argb, &balance);
 								printf("BALANCE: %f\n", balance);
-
 								char hexbal[9];
 								floatToHexStr(balance, hexbal);
 								hexbal[8] = '\0';
 
-								//encrypted in initcard
+								//send cid and bal to initcard where payload is generated, encrypted and written
 								initcard(cidhex, hexbal, TagInfo, NDEFinfo);
 								n = write(clientfd, "ack2", strlen("ack2"));
     							if (n < 0) 
-      								error("ERROR writing to socket");
+      								error("Error: writing");
       							char end[BUFSIZE];
     							end[0] = (char)-128;
     							end[1] = '\0';
@@ -1381,7 +1413,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							}
 							else
 							{
-								//don't overwrite
+								//if trying to initalize card with non-"blank" string
 								printf("Error: Card already initilized.\n" );
 							}
 						}
@@ -1393,11 +1425,13 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							encrypt(pl, KEY, PL_LEN);
 							float credit;
 							strToFloat(argu, &credit);
+
+							//add credit to card
 							transaction(pl, TagInfo, NDEFinfo, credit, 1);
 
 							n = write(clientfd, "ack3", strlen("ack3"));
     							if (n < 0) 
-      								error("ERROR writing to socket");	
+      								error("Error: writing");	
       						char end[BUFSIZE];
     						end[0] = (char)-128;
     						end[1] = '\0';
@@ -1411,14 +1445,14 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 				{
 
 					//HCE BUS SCANNER
-					printf("\t\tNDEF Content : NO\n");
+					printf("\t\tHCE App Detected\n");
 					
 					unsigned char SelectAIDCommand[10] = {0x00, 0xA4, 0x04, 0x00, 0x05, 0x01, 0x23, 0x45, 0x67, 0x89};
 					unsigned char SelectAIDResponse[255];
-
 					memset(SelectAIDResponse, 0x00, 255);
-
 					memcpy(&TagInfo, &g_TagInfo, sizeof(nfc_tag_info_t));
+
+					//send select command to detected device, should respond with payload in SelectAIDResponse
 					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
 					int enoughBalance = 1;
 					char cidstr[BUFSIZE];
@@ -1428,26 +1462,28 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					char timestamp[BUFSIZE];
 					if(0x00 == res)
 					{
-					printf("\n\t\tRAW APDU transceive failed\n");
+						printf("\n\t\tRAW APDU transceive failed\n");
 					}
 					else
 					{
-					printf("\n\t\tAPDU Select AID command sent\n\t\tResponse : \n\t\t");
+						printf("\n\t\tAPDU Select AID command sent\n\t\tResponse : \n\t\t");
 
 						for(i = 0x00; i < (unsigned int)res; i++)
 							{	
 								printf("%02X ", SelectAIDResponse[i]);
 							}
 							printf("\n\n");
-	    					encrypt(SelectAIDResponse, KEY, PL_LEN);
-	    					sscanf(SelectAIDResponse, "%8c%c%c%8c%s", cidstr, &dev, &valid, balance, timestamp);
+
+							//break payload down into fields
+	    					encrypt((char*)SelectAIDResponse, KEY, PL_LEN);
+	    					sscanf((const char*)SelectAIDResponse, "%8c%c%c%8c%s", cidstr, &dev, &valid, balance, timestamp);
 	    					cidstr[8] = '\0';
 	    					balance[8] = '\0';
 	    					timestamp[14] = '\0';
 	    					printf("CID STRING:%s DEV:%c VALID:%c BAL:%s TIME:%s\n",cidstr,dev,valid, balance, timestamp);
 
 					}
-
+					//if device is phone and active
 					if ((dev == '1') && (valid == '1'))
 					{
 						//Get LastUpdated from DB to see if transfer valid
@@ -1455,7 +1491,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						int port = DBPORT;
 						char hostname[] = HOSTNAME;
 						int cidint;
-	    				cidint = (int)strtol(cidstr, NULL, 16);
+	    				hexStrToInt(cidstr, &cidint);
 						char* msgParam = malloc(BUFSIZE);
 						strcpy(msgBuf, createGetLastUpdate(cidint, msgParam));
 						if (MESSAGESON)
@@ -1478,19 +1514,18 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
 								cidstrsmall[10 - firstDigit] = '\0';
 								xmlWrapper(CACHEFILE, 0, cidstrsmall, "LastUpdated", cacheTS);
-								
 								cacheTS[19] = '\0';
 								struct tm tmlu;
     							strptime(cacheTS, DATEFORMAT, &tmlu);
     							createPLTime(&tmlu, tsbuf);
     							strncpy(timestamp, tsbuf, 14);
 								printf("CACHE TS %s\n", timestamp);
-
 								free(cacheTS);
 
 							}
 							else
 							{
+								//get timestamp from DB response
 								msgBuf[19] = '\0';
 								printf("Reponse: %s\n", msgBuf);
 								struct tm tmlu;
@@ -1513,11 +1548,11 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						if (diffTime > 4500 || TRANSFERSOFF)
 						{
 							printf("Transfer expired, charging phone and setting new timestamp...\n");
-							//get balance from cache see if enough credit on account
+							//get balance from cache, see if enough credit on account
 							char* bal = malloc(BUFSIZE);
 							int firstDigit = 0;
 							int cidint;
-	    					cidint = (int)strtol(cidstr, NULL, 16);
+	    					hexStrToInt(cidstr, &cidint);
 	    					char cidintstr[BUFSIZE];
         					intToStr(cidint, cidintstr);
 							while(cidintstr[firstDigit] == '0')
@@ -1540,7 +1575,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						else
 						{
 							printf("Transfer still valid, not charging card, not changing timestamp...\n");
-							delta = 0;		
+							delta = 0;	//0 balance update
 
 						}
 
@@ -1561,6 +1596,41 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 									char* balQ = malloc(BUFSIZE);
 									strcpy(balQ, msgBuf);
 									enqueue(&DBREQS, balQ);
+
+									//convert cid to int str, removing leading zeroes (for xml)
+									int firstDigit = 0;
+									int cidint;
+			    					hexStrToInt(cidstr, &cidint);
+			    					char cidintstr[BUFSIZE];
+		        					intToStr(cidint, cidintstr);
+									while(cidintstr[firstDigit] == '0')
+									{
+										firstDigit++;
+									}
+									char cidstrsmall[10 - firstDigit + 1];
+									strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
+									cidstrsmall[10 - firstDigit] = '\0';
+									//change balance in cache
+									xmlUpdateBalance(CACHEFILE, cidstrsmall, delta);
+									//change timestamp in cache (if delta !=0)
+									if(delta != 0)
+									{
+										char buf[BUFSIZE];
+
+										time_t cur_t;
+										time(&cur_t);
+										struct tm* tm_new;
+										tm_new = localtime(&cur_t);
+										createPLTime(tm_new, buf);
+
+										struct tm ts;
+										strptime(buf, DATEPLFORMAT, &ts);
+								        char temp[BUFSIZE];
+								        strftime(temp, sizeof(temp), DATEFORMAT, &ts);
+								        temp[20] = '\0';    
+								        xmlWrapper(CACHEFILE, 1, cidstrsmall, "LastUpdated", temp);
+									}
+									
 								}
 								else if (CACHING)
 								{
@@ -1572,7 +1642,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 									while(DBREQS.size > 0)
 								    {
 								        node* qq = dequeue(&DBREQS);
-								        printf("Queued message: %s\nMessages left: %d\n", qq->data, DBREQS.size);
+								        printf("Queued message: %s\nMessages left: %d\n", (char*)qq->data, DBREQS.size);
 								        sendMessageToServer(hostname, port, qq->data);
 								        free(qq->data);
 								        free(qq);
@@ -2111,6 +2181,7 @@ void cmd_write(int arg_len, char** arg)
 	printf("Leaving ...\n");
 }
 
+/*Created bus mode initialization based on cmd_poll, cmd_write etc.*/
 void cmd_bus(int arg_len, char** arg)
 {
 	int res = 0x00;
@@ -2154,6 +2225,7 @@ void cmd_bus(int arg_len, char** arg)
 	printf("Leaving ...\n");
 }
 
+/*Created kiosk mode initialization based on NXP's cmd_poll, cmd_write etc.*/
 void cmd_kiosk(int arg_len, char** arg)
 {
 	int res = 0x00;
@@ -2300,6 +2372,7 @@ int CleanEnv()
  
  int main(int argc, char ** argv)
  {
+ 	//initialize LEDs
  // 	wiringPiSetup();
 
 	// pinMode(28, OUTPUT);

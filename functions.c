@@ -5,89 +5,68 @@
 #include "functions.h"
 #include "tcp.h"
 
-char* encrypt(char* input, char* key, int inputlen)
+void encrypt(char* input, char* key, int inputlen)
 {
-    // for xor, decrypting is just re-encrypting with same key
     int i;
     int keylen = strlen(key);
     for(i=0; i<inputlen; i++)
     {
         input[i]=input[i]^key[i%keylen];
     }
-    return input;
 }
 
-float strToFloat(char* str, float* f)
+void strToFloat(char* str, float* f)
 {
     *f = strtof(str, NULL);
-    
-    return *f;
 }
 
-float hexStrToFloat(char* str, float* f)
+void hexStrToFloat(char* str, float* f)
 {
     int num;
     sscanf(str, "%x", &num);
     *f = *((float*)&num);
-    
-    return *f;
 }
 
-char* floatToHexStr(float f, char* str)
+void floatToHexStr(float f, char* str)
 {
     sprintf(str, "%08x", *((int*)&f));
-    
-    return str;
 }
 
-int strToInt(char* str, int* i)
+void strToInt(char* str, int* i)
 {
-    
     *i = (int)strtol(str, NULL, 10);
-    
-    return *i;
 }
 
-int hexStrToInt(char*str, int* i)
+void hexStrToInt(char*str, int* i)
 {
     *i = (int)strtol(str, NULL, 16);
-    
-    return *i;
 }
 
-char* intToHexStr(int i, char* str)
+void intToHexStr(int i, char* str)
 {
     sprintf(str, "%08x", i);
     str[strlen(str)] = '\0';
-
-    return str;
 }
 
-char* intToStr(int i, char* str)
+void intToStr(int i, char* str)
 {
     sprintf(str, "%010d", i);
     str[strlen(str)] = '\0';
-
-    return str;
 }
 
-char* floatToStr(float f, char* str)
+void floatToStr(float f, char* str)
 {
     sprintf(str, "%.2f", f);
     str[strlen(str)] = '\0';
-
-    return str;
 }
 
-char* createPLTime(struct tm* new_t, char* buf)
+void createPLTime(struct tm* new_t, char* buf)
 {
     char temp[BUFSIZE];
     strftime(temp, sizeof(temp), DATEPLFORMAT, new_t);
     strcpy(buf, temp);
     buf[15] = '\0';
     printf("PL timestamp: %s\n", buf);
-    
-    return buf;
 }
 
 double comparePLTime(char* timestamp)

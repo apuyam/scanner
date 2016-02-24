@@ -1,7 +1,9 @@
-/* 
- * tcpclient.c - based on
+/* error, initServer, acceptClient, and sendMessageToServer based on
+ * http://www.cs.cmu.edu/afs/cs/academic/class/15213-f99/www/class26/tcpserver.c and
  * http://www.cs.cmu.edu/afs/cs/academic/class/15213-f99/www/class26/tcpclient.c
+ * and http://stackoverflow.com/questions/2597608/c-socket-connection-timeout
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,16 +21,16 @@ void error(char *msg) {
     exit(0);
 }
 
-int initServer(int parentfd, int portno)
+int initServer(int serverfd, int portno)
 {
     int optval;
-    parentfd = socket(AF_INET, SOCK_STREAM, 0);
+    serverfd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in serveraddr; /* server's addr */
-  if (parentfd < 0) 
-    error("ERROR opening socket");
+  if (serverfd < 0) 
+    error("Error: socket opening");
 
   optval = 1;
-  setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR, 
+  setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, 
        (const void *)&optval , sizeof(int));
 
   bzero((char *) &serveraddr, sizeof(serveraddr));
@@ -36,28 +38,28 @@ int initServer(int parentfd, int portno)
   serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
   serveraddr.sin_port = htons((unsigned short)portno);
 
-  if (bind(parentfd, (struct sockaddr *) &serveraddr, 
+  if (bind(serverfd, (struct sockaddr *) &serveraddr, 
      sizeof(serveraddr)) < 0) 
-    error("ERROR on binding");
+    error("Error: socket binding");
 
-  if (listen(parentfd, 2) < 0)
-    error("ERROR on listen");
+  if (listen(serverfd, 2) < 0)
+    error("Error: listening");
     
-  return parentfd;
+  return serverfd;
 }
 
-int acceptClient(int childfd, int parentfd, char* buf)
+int acceptClient(int clientfd, int serverfd, char* buf)
 { 
     unsigned int clientlen;
     struct sockaddr_in clientaddr;
     
     clientlen = sizeof(clientaddr);
-    childfd = accept(parentfd, (struct sockaddr *) &clientaddr, &clientlen);
-    if (childfd < 0) 
-      error("ERROR on accept");
+    clientfd = accept(serverfd, (struct sockaddr *) &clientaddr, &clientlen);
+    if (clientfd < 0) 
+      error("Error: accepting");
     
     printf("Connected to client...\n");
-    return childfd;
+    return clientfd;
 }
 
 int sendMessageToServer(char* hostname, int port, char* buf)
@@ -84,11 +86,11 @@ int sendMessageToServer(char* hostname, int port, char* buf)
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
-        error("ERROR opening socket");
+        error("Error: socket opening");
 
     server = gethostbyname(hostname);
     if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host as %s\n", hostname);
+        fprintf(stderr,"Error: no hostname %s\n", hostname);
         exit(0);
     }
 
@@ -98,6 +100,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
       (char *)&serveraddr.sin_addr.s_addr, server->h_length);
     serveraddr.sin_port = htons(port);
 
+    //set socket to non-blocking
     fcntl(sockfd, F_SETFL, O_NONBLOCK);
     if (connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
     { 
@@ -112,6 +115,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
 
             FD_ZERO(&rfds);
             FD_SET(sockfd, &rfds);
+            //timeout if no connection
             if (select(sockfd + 1, NULL, &rfds, NULL, &tv) > 0)
             {
                 int so_error;
@@ -119,6 +123,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
 
                 getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &so_error, &len);
 
+                // if connected
                 if (so_error == 0) {
                     success = 1;
                 }
@@ -134,46 +139,51 @@ int sendMessageToServer(char* hostname, int port, char* buf)
     }
     if (success)
     {
-      int arg;
-      arg = fcntl(sockfd, F_GETFL, NULL); 
-      arg &= (~O_NONBLOCK); 
-      fcntl(sockfd, F_SETFL, arg); 
-      printf("%s\n", buf);
+      //reset socket to blocking
+      int res;
+      res = fcntl(sockfd, F_GETFL, NULL); 
+      res &= (~O_NONBLOCK); 
+      fcntl(sockfd, F_SETFL, res); 
 
-      write(sockfd, LOGIN, strlen(LOGIN));
-      char end2[BUFSIZE];
-      end2[0] = (char)-128;
-      end2[1] = '\0';
-      write(sockfd, end2, strlen(end2));
+      char end[2]; //end of message byte
+      end[0] = (char)-128;
+      end[1] = '\0';
+
+      n = write(sockfd, LOGIN, strlen(LOGIN));
+      if (n < 0) 
+        error("Error: writing");
+      n = write(sockfd, end, strlen(end));
+      if (n < 0) 
+        error("Error: writing");
+
       /* send the message line to the server */
       n = write(sockfd, buf, strlen(buf));
       if (n < 0) 
-        error("ERROR writing to socket");
+        error("Error: writing");
       
-      char end[BUFSIZE];
-      end[0] = (char)-128;
-      end[1] = '\0';
-      write(sockfd, end, strlen(end));
+      n = write(sockfd, end, strlen(end));
+      if (n < 0) 
+        error("Error: writing");
 
       if (resp == 1)
       {
           //save time response in buf
           bzero(buf, BUFSIZE);
           sleep(1);
-          char foo[2];
-          foo[1] = '\0';
+          char in[2];
+          in[1] = '\0';
           int i = 0;
           printf("Awaiting database time...\n");
-          while (foo[0] != (char)-128)
+          while (in[0] != (char)-128)
           {
-              foo[0] = '\0';
-              while (foo[0] != '\n' && foo[0] != (char)-128)
+              in[0] = '\0';
+              while (in[0] != '\n' && in[0] != (char)-128)
               {
-                 n = read(sockfd, foo, 1);
+                 n = read(sockfd, in, 1);
                  if (n < 0) 
-                 error("ERROR reading from socket");
-                 printf("%c", foo[0]);
-                 buf[i] = foo[0];
+                 error("Error: reading");
+                 printf("%c", in[0]);
+                 buf[i] = in[0];
                  i++;
                  fflush(stdout);
 
@@ -186,24 +196,24 @@ int sendMessageToServer(char* hostname, int port, char* buf)
           //save timestamp response in buf
           bzero(buf, BUFSIZE);
           sleep(1);
-          char foo[2];
-          foo[1] = '\0';
+          char in[2];
+          in[1] = '\0';
           int i = 0;
           int start = 0;
           printf("Awaiting database timestamp...\n");
-          while (foo[0] != (char)-128)
+          while (in[0] != (char)-128)
           {
-              foo[0] = '\0';
-              while (foo[0] != '\n' && foo[0] != (char)-128)
+              in[0] = '\0';
+              while (in[0] != '\n' && in[0] != (char)-128)
               {
-                 n = read(sockfd, foo, 1);
+                 n = read(sockfd, in, 1);
                  if (n < 0) 
-                 error("ERROR reading from socket");
-                 printf("%c", foo[0]);
-                 if(foo[0] != '~')
+                 error("Error: reading");
+                 printf("%c", in[0]);
+                 if(in[0] != '~')
                   start = 1;
-                 if(foo[0] != (char)-128 && start){
-                    buf[i] = foo[0];
+                 if(in[0] != (char)-128 && start){
+                    buf[i] = in[0];
                     i++;
                     fflush(stdout);
                   }
@@ -218,21 +228,21 @@ int sendMessageToServer(char* hostname, int port, char* buf)
          printf("Awaiting database cache...\n");
          FILE *fw;
          fw = fopen(CACHEFILE, "w");
-         char foo[2];
-         foo[1] = '\0';
+         char in[2];
+         in[1] = '\0';
          int start = 0;
-         while (foo[0] != (char)-128)
+         while (in[0] != (char)-128)
          {
-             foo[0] = '\0';
-             while (foo[0] != '\n' && foo[0] != (char)-128)
+             in[0] = '\0';
+             while (in[0] != '\n' && in[0] != (char)-128)
              {
-                n = read(sockfd, foo, 1);
+                n = read(sockfd, in, 1);
                 if (n < 0) 
-                 error("ERROR reading from socket");
-                if(foo[0] == '<')
+                 error("Error: reading");
+                if(in[0] == '<')
                   start = 1;
-                if(foo[0] != (char)-128 && start)
-                    fputc(foo[0], fw);
+                if(in[0] != (char)-128 && start)
+                    fputc(in[0], fw);
                     fflush(stdout);
 
              }
@@ -325,7 +335,7 @@ char* createGetEntryAll(char* msgParam)
 
 char* createGetTime(char* msgParam)
 {
-    //cmd = 7
+    //cmd = 1
     msgParam[0] = '1';
     msgParam[1] = '\0';
     printf("Message: %s\n", msgParam);
