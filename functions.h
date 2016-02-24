@@ -1,39 +1,44 @@
+/* Contains general helper functions for encryption, 
+	type conversion and timestamp mangement */
+
 #define KEY "GHIJKLMNOPQRSTUVWXYZYXWVUTSRQPON"
 #define INITDATE "19700101101010"
 #define DATEFORMAT "%b %d %Y %H:%M:%S"
 #define DATEPLFORMAT "%Y%m%d%H%M%S"
 #define DATETSFORMAT "%Y-%m-%d %H:%M:%S"
-#define TRANSFERSOFF 1
+#define TRANSFERSOFF 1 //1 to disable transfer system
 
-char* encrypt(char* input, char* key, int inputlen);
-
+/*takes input of length inputlen and uses XOR encryption
+with key. Decryption of encrypted input is done with same 
+function and same key*/
+void encrypt(char* input, char* key, int inputlen);
 
 /*Converts a string eg. "2.500000" to a float*/
-float strToFloat(char* str, float* f);
+void strToFloat(char* str, float* f);
 
 /*Converts a string eg. "FFFFFFFF" to a float*/
-float hexStrToFloat(char* str, float* f);
+void hexStrToFloat(char* str, float* f);
 
 /*Converts float eg. 2.500000 to hex string*/
-char* floatToHexStr(float f, char* str);
+void floatToHexStr(float f, char* str);
 
 /*Converts string eg. "2147483647" to int*/
-int strToInt(char* str, int* i);
+void strToInt(char* str, int* i);
 
 /*Converts hex string to int eg. "18" to 24*/
-int hexStrToInt(char*str, int* i);
+void hexStrToInt(char*str, int* i);
 
 /*Converts int eg. 2147483647 to hex string eg. "FFFFFFFF"*/
-char* intToHexStr(int i, char* str);
+void intToHexStr(int i, char* str);
 
 /*Converts int to string eg. 24 to "24"*/
-char* intToStr(int i, char* str);
+void intToStr(int i, char* str);
 
 /*Converts float to string eg 2.5 to "2.5"*/
-char* floatToStr(float f, char* str);
+void floatToStr(float f, char* str);
 
 /*Creates date string of form DATEPLFORMAT from new_t and stores in buf*/
-char* createPLTime(struct tm* new_t, char* buf);
+void createPLTime(struct tm* new_t, char* buf);
 
 /*Checks date string timestamp and compares to current system time.
 Returns difference (curr-timestamp) in seconds*/

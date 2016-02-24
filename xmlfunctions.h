@@ -1,3 +1,5 @@
+/* libxml functions based on examples from
+http://xmlsoft.org/tutorial/*/
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
@@ -14,10 +16,10 @@ void updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
 /*looks for the val field under cid and stores it in buf*/
 void getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf);
 
-/*if func = 1, will update cid's val with buf.
+/*from file docname, if func = 1, will update cid's val with buf.
 if func = 0, will store cid's val in buf.*/
 void xmlWrapper(char* docname, int func, char* cid, char* val, char* buf);
 
-/*uses xmlWrapper, getEntry, and updateEntry to get a cid's cached balance
+/*from file docname, uses xmlWrapper, getEntry, and updateEntry to get a cid's cached balance
 and add delta to it*/
 void xmlUpdateBalance(char* docname, char* cid, float delta);

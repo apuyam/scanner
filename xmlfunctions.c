@@ -1,3 +1,6 @@
+/* libxml functions based on examples from
+http://xmlsoft.org/tutorial/*/
+
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
@@ -14,7 +17,7 @@ void updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
 	while (cur != NULL) {   
             if ((!xmlStrcmp(cur->name, (const xmlChar *)"CID"))) {
 		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    if(strcmp(key, cid) == 0)
+		    if((!xmlStrcmp(key, (const xmlChar *)cid)))
                     {
                         printf("Found CID: %s\n", key);
                         
@@ -22,7 +25,7 @@ void updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
                         {
                             cur = cur->next;
                         }
-                        printf("Updating cache balance: %s\n", buf);
+                        printf("Updating %s entry: %s\n", val, buf);
                         xmlNodeSetContent(cur, (const xmlChar *)buf);                      
                         
                     }
@@ -40,11 +43,11 @@ void getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
 	while (cur != NULL) {   
             if ((!xmlStrcmp(cur->name, (const xmlChar *)"CID"))) {
 		    key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-		    if(strcmp(key, cid) == 0)
+		    if((!xmlStrcmp(key, (const xmlChar *)cid)))
                     {
                         printf("Found CID: %s\n", key);
                         
-                        if (!strcmp(cid, val))
+                        if ((!xmlStrcmp((const xmlChar*)cid, (const xmlChar *)val)))
                         {
                             strncpy(buf, val, strlen(val));
                             buf[strlen(val)] = '\0';
@@ -58,8 +61,8 @@ void getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf)
                                 cur = cur->next;
                             }
                             xmlChar* ent = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-                            strncpy(buf, ent, strlen(ent));
-                            buf[strlen(ent)] = '\0';
+                            strncpy(buf, (const char*)ent, strlen((const char*)ent));
+                            buf[strlen((const char*)ent)] = '\0';
                             printf("Found: %s\n", buf);
                         }
                         
