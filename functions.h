@@ -31,11 +31,15 @@ void hexStrToInt(char*str, int* i);
 /*Converts int eg. 2147483647 to hex string eg. "FFFFFFFF"*/
 void intToHexStr(int i, char* str);
 
-/*Converts int to string eg. 24 to "24"*/
+/*Converts int to string, width of 10 eg. 24 to "0000000024"*/
 void intToStr(int i, char* str);
 
 /*Converts float to string eg 2.5 to "2.5"*/
 void floatToStr(float f, char* str);
+
+/*Convets int to CID string without leading zeroes for XML cache reading.
+eg. 24 to "24"*/
+void createCacheCID(int cidint, char* cidstrsmall);
 
 /*Creates date string of form DATEPLFORMAT from new_t and stores in buf*/
 void createPLTime(struct tm* new_t, char* buf);

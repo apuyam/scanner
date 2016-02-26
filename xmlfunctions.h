@@ -11,15 +11,18 @@ http://xmlsoft.org/tutorial/*/
 #include "functions.h"
 
 /*looks for the val field under cid and changes it to buf*/
-void updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf);
+int updateEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf);
 
 /*looks for the val field under cid and stores it in buf*/
-void getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf);
+int getEntry(xmlDocPtr doc, xmlNodePtr cur, char* cid, char* val, char* buf);
 
 /*from file docname, if func = 1, will update cid's val with buf.
 if func = 0, will store cid's val in buf.*/
-void xmlWrapper(char* docname, int func, char* cid, char* val, char* buf);
+int xmlWrapper(char* docname, int func, char* cid, char* val, char* buf);
 
 /*from file docname, uses xmlWrapper, getEntry, and updateEntry to get a cid's cached balance
 and add delta to it*/
-void xmlUpdateBalance(char* docname, char* cid, float delta);
+int xmlUpdateBalance(char* docname, char* cid, float delta);
+
+/*checks docname if cid is in the cache. returns 1 if found, 0 otherwise*/
+int verifyCID(char* docname, char* cid);

@@ -766,6 +766,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 {
 	/* split payload into strings*/
 	int enoughBalance = 1;
+	int cidfound = 0;
 	char cid[9];
 	char dev;
 	char valid;
@@ -793,7 +794,12 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
 
-	if ((dev == '0') && (valid == '1'))
+	//TODO: check DB/cache? for cid
+	char cidstrsmall[BUFSIZE];
+	createCacheCID(p->cid, cidstrsmall);
+	cidfound = verifyCID(CACHEFILE, cidstrsmall);
+
+	if ((dev == '0') && (valid == '1') && (cidfound))
 	{
 		//if time difference is more than 1 hr 15 (4500s), charge balance and write new time stamp
 		//else no charge
@@ -874,17 +880,8 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 						enqueue(&DBREQS, balQ);
 
 						//convert hex cid to int str, removing leading zeroes (for xml)
-						char cidstr[BUFSIZE];
-        				intToStr(p->cid, cidstr);
-        				int firstDigit = 0;
-						while(cidstr[firstDigit] == '0')
-						{
-							firstDigit++;
-						}
-						char cidstrsmall[10 - firstDigit + 1];
-						strncpy(cidstrsmall, cidstr+firstDigit, 10 - firstDigit);
-						cidstrsmall[10 - firstDigit] = '\0';
-        				printf("%d %s %f\n",firstDigit, cidstrsmall, delta );
+        				char cidstrsmall[BUFSIZE];
+						createCacheCID(p->cid, cidstrsmall);
 
         				//write new balance and timestamp in cache
 						xmlUpdateBalance(CACHEFILE, cidstrsmall, delta);
@@ -1455,6 +1452,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					//send select command to detected device, should respond with payload in SelectAIDResponse
 					res = nfcTag_transceive(TagInfo.handle, SelectAIDCommand, 10, SelectAIDResponse, 255, 500);
 					int enoughBalance = 1;
+					int cidfound;
 					char cidstr[BUFSIZE];
 					char dev;
 					char valid;
@@ -1483,8 +1481,14 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	    					printf("CID STRING:%s DEV:%c VALID:%c BAL:%s TIME:%s\n",cidstr,dev,valid, balance, timestamp);
 
 					}
+					//check DB/cache? for CID
+					int cidint;
+					hexStrToInt(cidstr, &cidint);
+					char cidstrsmall[BUFSIZE];
+					createCacheCID(cidint, cidstrsmall);
+					cidfound = verifyCID(CACHEFILE, cidstrsmall);
 					//if device is phone and active
-					if ((dev == '1') && (valid == '1'))
+					if ((dev == '1') && (valid == '1') && (cidfound))
 					{
 						//Get LastUpdated from DB to see if transfer valid
 						char msgBuf[BUFSIZE];
@@ -1503,16 +1507,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								printf("No connection to database\n");
 								//if no connection use cache timestamp
 								char* cacheTS = malloc(BUFSIZE);
-								int firstDigit = 0;
-								char cidintstr[BUFSIZE];
-	        					intToStr(cidint, cidintstr);
-								while(cidintstr[firstDigit] == '0')
-								{
-									firstDigit++;
-								}
-								char cidstrsmall[10 - firstDigit + 1];
-								strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
-								cidstrsmall[10 - firstDigit] = '\0';
+								char cidstrsmall[BUFSIZE];
+								createCacheCID(cidint, cidstrsmall);
 								xmlWrapper(CACHEFILE, 0, cidstrsmall, "LastUpdated", cacheTS);
 								cacheTS[19] = '\0';
 								struct tm tmlu;
@@ -1550,18 +1546,10 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							printf("Transfer expired, charging phone and setting new timestamp...\n");
 							//get balance from cache, see if enough credit on account
 							char* bal = malloc(BUFSIZE);
-							int firstDigit = 0;
 							int cidint;
 	    					hexStrToInt(cidstr, &cidint);
-	    					char cidintstr[BUFSIZE];
-        					intToStr(cidint, cidintstr);
-							while(cidintstr[firstDigit] == '0')
-							{
-								firstDigit++;
-							}
-							char cidstrsmall[10 - firstDigit + 1];
-							strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
-							cidstrsmall[10 - firstDigit] = '\0';
+	    					char cidstrsmall[BUFSIZE];
+							createCacheCID(cidint, cidstrsmall);
 							xmlWrapper(CACHEFILE, 0, cidstrsmall, "Balance", bal);
 							printf("Cid: %s Bal: %s\n",cidstrsmall, bal);
 							if(bal < 0)
@@ -1598,18 +1586,10 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 									enqueue(&DBREQS, balQ);
 
 									//convert cid to int str, removing leading zeroes (for xml)
-									int firstDigit = 0;
 									int cidint;
 			    					hexStrToInt(cidstr, &cidint);
-			    					char cidintstr[BUFSIZE];
-		        					intToStr(cidint, cidintstr);
-									while(cidintstr[firstDigit] == '0')
-									{
-										firstDigit++;
-									}
-									char cidstrsmall[10 - firstDigit + 1];
-									strncpy(cidstrsmall, cidintstr+firstDigit, 10 - firstDigit);
-									cidstrsmall[10 - firstDigit] = '\0';
+			    					char cidstrsmall[BUFSIZE];
+									createCacheCID(cidint, cidstrsmall);
 									//change balance in cache
 									xmlUpdateBalance(CACHEFILE, cidstrsmall, delta);
 									//change timestamp in cache (if delta !=0)
