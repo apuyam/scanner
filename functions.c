@@ -60,6 +60,19 @@ void floatToStr(float f, char* str)
     str[strlen(str)] = '\0';
 }
 
+void createCacheCID(int cidint, char* cidstrsmall)
+{
+    char temp[BUFSIZE];
+    intToStr(cidint, temp);
+    int firstDigit = 0;
+    while(temp[firstDigit] == '0')
+    {
+        firstDigit++;
+    }
+    strncpy(cidstrsmall, temp+firstDigit, 10 - firstDigit);
+    cidstrsmall[10 - firstDigit] = '\0';
+}
+
 void createPLTime(struct tm* new_t, char* buf)
 {
     char temp[BUFSIZE];
@@ -87,7 +100,7 @@ void getFullCache(char* hostname, int port)
     printf("Requesting database cache...\n");
     char msgBuf[BUFSIZE];
     char* msgParam = malloc(BUFSIZE);
-    strcpy(msgBuf, createGetEntryAll(msgBuf));
+    strcpy(msgBuf, createGetEntryAll(msgParam));
     
     if (MESSAGESON)
     {
