@@ -78,6 +78,11 @@ int sendMessageToServer(char* hostname, int port, char* buf)
         printf("Sending time request...\n");
         resp = 1;
     }
+    else if (buf[0] == '2')
+    {
+        printf("Sending CID request...\n");
+        resp = 2;
+    }
     else if (buf[0] == '7')
     {
         printf("Sending cache request...\n");
@@ -191,6 +196,29 @@ int sendMessageToServer(char* hostname, int port, char* buf)
 
           }
       }
+      else if (resp == 2)
+      {
+          bzero(buf, BUFSIZE);
+          sleep(1);
+          char in[2];
+          in[1] = '\0';
+          int i = 0;
+          printf("Awaiting database time...\n");
+          n = read(sockfd, in, 1);
+                 if (n < 0) 
+                  error("Error: reading");
+          n = read(sockfd, in, 1);
+                 if (n < 0) 
+                  error("Error: reading");
+          strncpy(buf, in, 2);
+          n = read(sockfd, in, 1);
+                 if (n < 0) 
+                  error("Error: reading");
+          printf("%c", in[0]);
+          fflush(stdout);
+          printf("%s\n", buf);
+
+      }
       else if (resp == 10)
       {
           //save timestamp response in buf
@@ -282,27 +310,20 @@ char* createBalanceUpdate(int cid, float diff, char* msgParam)
     return msgParam;
 }
 
-char* createEntry(int cid, float balance, char* msgParam)
+char* createCheckCID(int cid, char* msgParam)
 {
-    int i;
-    
     char cidBuf[BUFSIZE];
-    char balanceBuf[BUFSIZE];
-   
-    snprintf(cidBuf, BUFSIZE, "%d", cid);
-    snprintf(balanceBuf, BUFSIZE, "%f", balance);
-    printf("%s %s\n", cidBuf, balanceBuf);
     
-    //cmd + ' ' + cid + ' ' + '-' + balance
-    i = 1 + 1 + strlen(cidBuf) + 1 + strlen(balanceBuf);
-    msgParam[0] = '4';
+    snprintf(cidBuf, BUFSIZE, "%d", cid);
+    
+    //cmd + ' ' + cid
+    int i = 1 + 1 + strlen(cidBuf);
+    msgParam[0] = '2';
     msgParam[1] = ' ';
-    msgParam[2 + strlen(cidBuf)] = ' ';
     strncpy(msgParam + 2, cidBuf, strlen(cidBuf));
-    strncpy(msgParam + 2 + strlen(cidBuf) + 1, balanceBuf, strlen(balanceBuf));
     msgParam[i] = '\0';
     printf("Message: %s\n", msgParam);
-
+    
     return msgParam;
 }
 

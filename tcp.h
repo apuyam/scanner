@@ -5,9 +5,9 @@
  * and http://stackoverflow.com/questions/2597608/c-socket-connection-timeout
  */
 
-#define HOSTNAME "192.168.100.117"
+//#define HOSTNAME "192.168.100.117"
 //#define HOSTNAME "169.254.85.87"
-//#define HOSTNAME "192.169.0.24"
+#define HOSTNAME "192.169.0.24"
 #define DBPORT 5555
 #define GUIPORT 5556
 #define FORMAT_BLANK "0101"
@@ -47,7 +47,7 @@ char* createBalanceUpdate(int cid, float diff, char* msgParam);
 
 /* creates message to send to database of form 
 "6 cid balance" and stores it in msgParam*/
-char* createEntry(int cid, float balance, char* msgParam);
+char* createCheckCID(int cid, char* msgParam);
 
 /* creates message to send to database of form 
 "7 cid" and stores it in msgParam*/

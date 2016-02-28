@@ -84,14 +84,22 @@ void createPLTime(struct tm* new_t, char* buf)
 
 double comparePLTime(char* timestamp)
 {
+    time_t timenow;
+    struct tm* loc;
+
+    time(&timenow);
+    loc = localtime(&timenow);
     double diff;
     struct tm tmpl;
     strptime(timestamp, DATEPLFORMAT, &tmpl);
-    time_t end_t;
+
+    //force DST settings
+    tmpl.tm_isdst = ISDST;
+    loc->tm_isdst = ISDST;
+
+    time_t end_t = mktime(loc);
     time_t pl_t = mktime(&tmpl);
-    time(&end_t);
     diff = difftime(end_t,pl_t);
-    
     return diff;
 }
 

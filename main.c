@@ -795,10 +795,53 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	unsigned int NDEFMsgLen = 0x00;
 
 	//TODO: check DB/cache? for cid
-	char cidstrsmall[BUFSIZE];
-	createCacheCID(p->cid, cidstrsmall);
-	cidfound = verifyCID(CACHEFILE, cidstrsmall);
+	if (kiosk == 0)
+	{
+		char cidstrsmall[BUFSIZE];
 
+		createCacheCID(p->cid, cidstrsmall);
+		cidfound = verifyCID(CACHEFILE, cidstrsmall);
+
+		//if not in cache check database
+		if (!cidfound)
+		{
+			printf("Checking database for CID...\n");
+	    	char msgBuf[BUFSIZE];
+	    	char* msgParam = malloc(BUFSIZE);
+	    	strcpy(msgBuf, createCheckCID(p->cid, msgParam));
+	    	if (MESSAGESON)
+		    {
+		        if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
+		        {
+		            printf("No connection to database\n");
+		            printf("Error: cannot verify CID\n");
+		        }
+		        else
+		        {
+		        	printf("CID Response: %s\n", msgBuf);
+		        	if (msgBuf[0] == '1')
+		        	{
+		        		cidfound = 1;
+		        	}
+		        	getFullCache(HOSTNAME, DBPORT);	
+		        }
+		    }
+		    else
+		    {
+		        printf("MESSAGES OFF: NOT SENDING\n");  
+		    }
+		    free(msgParam);
+
+		}
+	}
+	else
+	{
+		cidfound = 1;
+	}
+	
+	
+    
+    
 	if ((dev == '0') && (valid == '1') && (cidfound))
 	{
 		//if time difference is more than 1 hr 15 (4500s), charge balance and write new time stamp
@@ -901,7 +944,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 					{
 						//update entire cache
 						sleep(1); // test this
-						getFullCache(HOSTNAME, port);	
+						getFullCache(HOSTNAME, DBPORT);	
 					}
 					if (sendQ)
 					{
@@ -1057,6 +1100,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 	do
 	{
+
 		ndef_info_t NDEFinfo;
 		nfc_tag_info_t TagInfo;
 		if (0x06 == mode)
@@ -1487,6 +1531,38 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					char cidstrsmall[BUFSIZE];
 					createCacheCID(cidint, cidstrsmall);
 					cidfound = verifyCID(CACHEFILE, cidstrsmall);
+					if (!cidfound)
+					{
+						printf("Checking database for CID...\n");
+				    	char msgBuf[BUFSIZE];
+				    	char* msgParam = malloc(BUFSIZE);
+				    	int cidint;
+	    				hexStrToInt(cidstr, &cidint);
+				    	strcpy(msgBuf, createCheckCID(cidint, msgParam));
+				    	if (MESSAGESON)
+					    {
+					        if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
+					        {
+					            printf("No connection to database\n");
+					            printf("Error: cannot verify CID\n");
+					        }
+					        else
+					        {
+					        	printf("CID Response: %s\n", msgBuf);
+					        	if (msgBuf[0] == '1')
+					        	{
+					        		cidfound = 1;
+					        	}
+					        	getFullCache(HOSTNAME, DBPORT);	
+					        }
+					    }
+					    else
+					    {
+					        printf("MESSAGES OFF: NOT SENDING\n");  
+					    }
+					    free(msgParam);
+
+					}
 					//if device is phone and active
 					if ((dev == '1') && (valid == '1') && (cidfound))
 					{
