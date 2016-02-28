@@ -6,8 +6,8 @@
 #define DATEFORMAT "%b %d %Y %H:%M:%S"
 #define DATEPLFORMAT "%Y%m%d%H%M%S"
 #define DATETSFORMAT "%Y-%m-%d %H:%M:%S"
-#define TRANSFERSOFF 0 //1 to disable transfer system
-#define ISDST 0
+#define TRANSFERSOFF 1 //1 to disable transfer system
+#define ISDST 0;
 
 /*takes input of length inputlen and uses XOR encryption
 with key. Decryption of encrypted input is done with same 

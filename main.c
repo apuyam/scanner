@@ -23,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
 #include "linux_nfc_api.h"
 #include "tools.h"
 #include "payload.h"
@@ -92,6 +93,16 @@ static nfcSnepClientCallback_t g_SnepClientCB;
 unsigned char *HCE_data = NULL;
 unsigned int HCE_dataLenght = 0x00;
 static list DBREQS;
+
+void signal_handle(int sig)
+{
+    printf("Exit signal received %d\n", sig);
+    if (sig == SIGINT)
+    {
+        printf("Exiting....\n");
+        exit(1);
+    }
+}
 
 
 void help(int mode);
@@ -2326,7 +2337,7 @@ void cmd_kiosk(int arg_len, char** arg)
 
 void* ExitThread(void* pContext)
 {
-	printf("                              ... press enter to quit ...\n\n");
+	printf("                              ... press Ctrl-C to quit ...\n\n");
 	
 	getchar();
 	
@@ -2433,7 +2444,10 @@ int CleanEnv()
 
 	// pinMode(28, OUTPUT);
 	// digitalWrite(28, LOW);
-
+ 	if (signal(SIGINT,signal_handle)==SIG_ERR){
+    	perror("Error: signal handle setup");
+    	exit(1);
+  	}
 	if (argc<2)
 	{
 		printf("Missing argument\n");
