@@ -9,7 +9,7 @@
 #define TRANSFERSOFF 0 //1 to disable transfer system
 #define TRANSFERSEC 4500 // 4500s = 1 hr 15 mins
 #define ISDST 0
-#define LEDON //comment out to disable LEDs (kiosk mode)
+//#define LEDON //comment out to disable LEDs (kiosk mode)
 #define RED 28
 #define GREEN 29
 #define LEDDELAY 200
