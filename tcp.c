@@ -202,7 +202,6 @@ int sendMessageToServer(char* hostname, int port, char* buf)
           sleep(1);
           char in[2];
           in[1] = '\0';
-          int i = 0;
           printf("Awaiting database time...\n");
           n = read(sockfd, in, 1);
                  if (n < 0) 
@@ -254,6 +253,7 @@ int sendMessageToServer(char* hostname, int port, char* buf)
       {
         //write cache response to file
          printf("Awaiting database cache...\n");
+         sleep(1);
          FILE *fw;
          fw = fopen(CACHEFILE, "w");
          char in[2];

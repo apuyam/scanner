@@ -31,7 +31,10 @@
 #include "functions.h"
 #include "xmlfunctions.h"
 #include "list.h"
-//#include "wiringPi.h"
+
+#ifdef LEDON
+ 	#include "wiringPi.h"
+#endif /* LEDON */
 
 /*NXP typedefs*/
 typedef enum eDevState
@@ -112,6 +115,10 @@ void signal_handle(int sig)
     if (sig == SIGINT)
     {
         printf("Exiting....\n");
+        #ifdef LEDON
+        	digitalWrite(GREEN, LOW);
+			digitalWrite(RED, LOW);
+		#endif /* LEDON */
         exit(1);
     }
 }
@@ -904,9 +911,12 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				float f = p->balance;
 				sprintf(balance, "%X", *((int*)&f));
 
-				if (p->balance < 0) //allow one transaction to bring a user into negative balance
+				if (p->balance < FEE) //allow one transaction to bring a user into negative balance
 				{
 					printf("Invalid: not enough balance for transaction.\n");
+					#ifdef LEDON
+        				blink(RED, 2);
+					#endif /* LEDON */
 					enoughBalance = 0;
 				}
 				else
@@ -924,7 +934,10 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 					printf("New payload: %s \n", resp);
 					encrypt(resp, KEY, PL_LEN);
 					writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
-					//TODO: done writing here
+					#ifdef LEDON
+        				blink(GREEN, 2);
+					#endif /* LEDON */
+					
 				}
 
 
@@ -932,6 +945,9 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			else //transfer within transfer time so don't charge
 			{
 				printf("Transfer still valid, not charging card, not changing timestamp...\n");
+				#ifdef LEDON
+        			blink(GREEN, 2);
+				#endif /* LEDON */
 				delta = 0; //create balance update of 0;
 
 			}
@@ -977,7 +993,6 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 					else if (CACHING)
 					{
 						//update entire cache
-						sleep(1); // test this
 						getFullCache(HOSTNAME, DBPORT);	
 					}
 					if (sendQ)
@@ -1023,17 +1038,17 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			printf("New payload: %s \n", resp);
 			encrypt(resp, KEY, PL_LEN);
 			writeMessage(resp, TagInfo, NDEFMsg, NDEFMsgLen, NDEFinfo);
-			//TODO: done writing here.
 		}
 
 
 		printf("Writing finished.\n");
-		//TODO: Green LED
 	}
 	else
 	{
 		printf("Invalid\n");
-		//TODO: Red LED
+		#ifdef LEDON
+        	blink(RED, 2);
+		#endif /* LEDON */
 	}
 	free(p);
 }
@@ -1062,7 +1077,6 @@ void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEF
 	encrypt(resp, KEY, PL_LEN);
 	printf("Decrypted payload: %s length %d\n", resp, strlen(resp));
 
-	//TODO: writing finished
 	printf("\nWriting finished.\n");
 }
 
@@ -1201,6 +1215,10 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		{
 			//blocks until card/HCE app detected
 			printf("Waiting for a Tag/Device...\n\n");
+			#ifdef LEDON
+        		digitalWrite(GREEN, HIGH);
+			#endif /* LEDON */
+			
 			g_DevState = eDevState_WAIT_ARRIVAL;
 			framework_WaitMutex(g_devLock, 0);
 		}
@@ -1322,6 +1340,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						//BUS SCANNER MODE
 
+
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
 						if (NDEFinfo.current_ndef_length == PL_LEN + 7)
 						{
@@ -1330,10 +1349,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							printf("Decrypted: %s\n", pl);
 
 							transaction(pl, TagInfo, NDEFinfo, FEE, 0);
-							// for(k = 0; k<2; k++)
-							// {
-							// 	digitalWrite(28, HIGH);delay(500);
-							// }
+
 						}
 						else
 						{
@@ -1481,6 +1497,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 
 								//send cid and bal to initcard where payload is generated, encrypted and written
 								initcard(cidhex, hexbal, TagInfo, NDEFinfo);
+
 								n = write(clientfd, "ack2", strlen("ack2"));
     							if (n < 0) 
       								error("Error: writing");
@@ -1542,24 +1559,27 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					if(0x00 == res)
 					{
 						printf("\n\t\tRAW APDU transceive failed\n");
+						#ifdef LEDON
+        					blink(RED, 2);
+						#endif /* LEDON */
 					}
 					else
 					{
 						printf("\n\t\tAPDU Select AID command sent\n\t\tResponse : \n\t\t");
 
 						for(i = 0x00; i < (unsigned int)res; i++)
-							{	
-								printf("%02X ", SelectAIDResponse[i]);
-							}
-							printf("\n\n");
+						{	
+							printf("%02X ", SelectAIDResponse[i]);
+						}
+						printf("\n\n");
 
-							//break payload down into fields
-	    					encrypt((char*)SelectAIDResponse, KEY, PL_LEN);
-	    					sscanf((const char*)SelectAIDResponse, "%8c%c%c%8c%s", cidstr, &dev, &valid, balance, timestamp);
-	    					cidstr[8] = '\0';
-	    					balance[8] = '\0';
-	    					timestamp[14] = '\0';
-	    					printf("CID STRING:%s DEV:%c VALID:%c BAL:%s TIME:%s\n",cidstr,dev,valid, balance, timestamp);
+						//break payload down into fields
+    					encrypt((char*)SelectAIDResponse, KEY, PL_LEN);
+    					sscanf((const char*)SelectAIDResponse, "%8c%c%c%8c%s", cidstr, &dev, &valid, balance, timestamp);
+    					cidstr[8] = '\0';
+    					balance[8] = '\0';
+    					timestamp[14] = '\0';
+    					printf("CID STRING:%s DEV:%c VALID:%c BAL:%s TIME:%s\n",cidstr,dev,valid, balance, timestamp);
 
 					}
 					//check DB/cache? for CID
@@ -1663,10 +1683,19 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							createCacheCID(cidint, cidstrsmall);
 							xmlWrapper(CACHEFILE, 0, cidstrsmall, "Balance", bal);
 							printf("Cid: %s Bal: %s\n",cidstrsmall, bal);
-							if(bal < 0)
+							if(bal < 0) //allow one transaction to bring user to negative balance
 							{
 								printf("Invalid, not enough balance for transaction");
+								#ifdef LEDON
+        							blink(RED, 2);
+								#endif /* LEDON */
 								enoughBalance = 0;
+							}
+							else
+							{
+								#ifdef LEDON
+        							blink(GREEN, 2);
+								#endif /* LEDON */
 							}
 							free(bal);
 
@@ -1674,12 +1703,16 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						else
 						{
 							printf("Transfer still valid, not charging card, not changing timestamp...\n");
+							#ifdef LEDON
+        						blink(GREEN, 2);
+							#endif /* LEDON */
 							delta = 0;	//0 balance update
 
 						}
 
 						if (enoughBalance)
 						{
+							
 							printf("Updating database...\n");
 							bzero(msgBuf, BUFSIZE);
 							bzero(msgParam, BUFSIZE);
@@ -1751,6 +1784,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 										
 					}
 					else{
+						#ifdef LEDON
+        					blink(RED, 2);
+						#endif /* LEDON */
 						printf("Error: phone not valid device\n");
 					}
 				}
@@ -1761,7 +1797,9 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 				framework_UnlockMutex(g_devLock);
  				printf("\tDevice Found\n");	
 				
-				//TODO: LED (p2p)
+				#ifdef LEDON
+        			blink(RED, 2);
+				#endif /* LEDON */
 				framework_LockMutex(g_SnepClientLock);
 	
 				if(eSnepClientState_READY == g_SnepClientState)
@@ -2379,6 +2417,11 @@ void* ExitThread(void* pContext)
 	printf("                              ... press Ctrl-C to quit ...\n\n");
 	
 	getchar();
+
+	#ifdef LEDON
+		digitalWrite(GREEN, LOW);
+		digitalWrite(RED, LOW);
+	#endif /* LEDON */
 	
 	framework_LockMutex(g_SnepClientLock);
 	
@@ -2485,10 +2528,15 @@ int CleanEnv()
  int main(int argc, char ** argv)
  {
  	//initialize LEDs
- // 	wiringPiSetup();
+ 	#ifdef LEDON
+ 		wiringPiSetup();
 
-	// pinMode(28, OUTPUT);
-	// digitalWrite(28, LOW);
+		pinMode(RED, OUTPUT);
+		pinMode(GREEN, OUTPUT);
+		digitalWrite(GREEN, LOW);
+		digitalWrite(RED, LOW);
+	#endif /* LEDON */
+
  	if (signal(SIGINT,signal_handle)==SIG_ERR){
     	perror("Error: signal handle setup");
     	exit(1);

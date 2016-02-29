@@ -17,7 +17,7 @@
 #define CACHING 1 //1 to enable getFullCache calls
 #define REQTIME 1 //1 to enable initial time sync
 #define BUFSIZE 256
-#define TIMEOUTSEC 2 //timeout for sendMessageToServer
+#define TIMEOUTSEC 1 //timeout for sendMessageToServer
 
 /*print error message and exit*/
 void error(char *msg);

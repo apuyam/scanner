@@ -6,6 +6,11 @@
 #include "functions.h"
 #include "tcp.h"
 
+#ifdef LEDON
+    #include "wiringPi.h"
+#endif /*LEDON*/
+
+
 void encrypt(char* input, char* key, int inputlen)
 {
     int i;
@@ -124,3 +129,16 @@ void getFullCache(char* hostname, int port)
     }
     free(msgParam);
 }
+
+#ifdef LEDON
+void blink(int colour, int k)
+{
+    digitalWrite(colour, LOW);delay(LEDDELAY);
+    int n;
+    for(n = 0; n < k; n++)
+    {
+        digitalWrite(colour, HIGH);delay(LEDDELAY);
+        digitalWrite(colour, LOW);delay(LEDDELAY);
+    }
+}
+#endif /* LEDON */
