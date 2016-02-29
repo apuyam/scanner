@@ -6,8 +6,9 @@
 #define DATEFORMAT "%b %d %Y %H:%M:%S"
 #define DATEPLFORMAT "%Y%m%d%H%M%S"
 #define DATETSFORMAT "%Y-%m-%d %H:%M:%S"
-#define TRANSFERSOFF 1 //1 to disable transfer system
-#define ISDST 0;
+#define TRANSFERSOFF 0 //1 to disable transfer system
+#define TRANSFERSEC 4500 // 4500s = 1 hr 15 mins
+#define ISDST 0
 
 /*takes input of length inputlen and uses XOR encryption
 with key. Decryption of encrypted input is done with same 
@@ -27,7 +28,7 @@ void floatToHexStr(float f, char* str);
 void strToInt(char* str, int* i);
 
 /*Converts hex string to int eg. "18" to 24*/
-void hexStrToInt(char*str, int* i);
+void hexStrToInt(char* str, int* i);
 
 /*Converts int eg. 2147483647 to hex string eg. "FFFFFFFF"*/
 void intToHexStr(int i, char* str);

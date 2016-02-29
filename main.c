@@ -33,7 +33,7 @@
 #include "list.h"
 //#include "wiringPi.h"
 
-
+/*NXP typedefs*/
 typedef enum eDevState
 {
 	eDevState_NONE,
@@ -77,6 +77,7 @@ typedef enum T4T_NDEF_EMU_state_t
 	NDEF_Selected
 } T4T_NDEF_EMU_state_t;
 
+/*NXP variables*/
 static void* g_ThreadHandle = NULL;
 static void* g_devLock = NULL;
 static void* g_SnepClientLock = NULL;
@@ -92,8 +93,19 @@ static nfcSnepServerCallback_t g_SnepServerCB;
 static nfcSnepClientCallback_t g_SnepClientCB;
 unsigned char *HCE_data = NULL;
 unsigned int HCE_dataLenght = 0x00;
-static list DBREQS;
 
+
+static list DBREQS; /*Added variable. Linked list queue of balance updates.*/
+
+
+/*NXP function prototypes*/
+void help(int mode);
+int InitEnv();
+int LookForTag(char** args, int args_len, char* tag, char** data, int format);
+void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen);
+int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, unsigned int* outNDEFBufferLen);
+
+/* Added Function. Handler to ensure exiting on Ctrl-C (SIGINT)*/
 void signal_handle(int sig)
 {
     printf("Exit signal received %d\n", sig);
@@ -104,13 +116,7 @@ void signal_handle(int sig)
     }
 }
 
-
-void help(int mode);
-int InitEnv();
-int LookForTag(char** args, int args_len, char* tag, char** data, int format);
-void PrintNDEFContent(nfc_tag_info_t* TagInfo, ndef_info_t* NDEFinfo, unsigned char* ndefRaw, unsigned int ndefRawLen);
-int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, unsigned int* outNDEFBufferLen);
-
+/*NXP Function*/
 void onDataReceived(unsigned char *data, unsigned int data_length)
 {
 	framework_LockMutex(g_HCELock);
@@ -132,6 +138,8 @@ void onDataReceived(unsigned char *data, unsigned int data_length)
 	framework_UnlockMutex(g_HCELock);
 }
  
+
+/*NXP Function*/
 void onTagArrival(nfc_tag_info_t *pTagInfo)
 {
 	framework_LockMutex(g_devLock);
@@ -166,6 +174,8 @@ void onTagArrival(nfc_tag_info_t *pTagInfo)
 	framework_UnlockMutex(g_devLock);
 }
 
+
+/*NXP Function*/
 void onTagDeparture(void)
 {	
 	framework_LockMutex(g_devLock);
@@ -192,6 +202,8 @@ void onTagDeparture(void)
 	framework_UnlockMutex(g_devLock);
 }
 
+
+/*NXP Function*/
 void onDeviceArrival (void)
 {
 	framework_LockMutex(g_devLock);
@@ -234,6 +246,7 @@ void onDeviceArrival (void)
 }
 
 
+/*NXP Function*/
 void onDeviceDeparture (void)
 {
 	framework_LockMutex(g_devLock);
@@ -301,6 +314,8 @@ void onDeviceDeparture (void)
 }
 
 
+
+/*NXP Function*/
 void onMessageReceived(unsigned char *message, unsigned int length)
 {
 	//unsigned int i = 0x00;
@@ -308,6 +323,8 @@ void onMessageReceived(unsigned char *message, unsigned int length)
 	PrintNDEFContent(NULL, NULL, message, length);
 }
 
+
+/*NXP Function*/
 void onSnepClientReady()
 {
 	framework_LockMutex(g_devLock);
@@ -377,6 +394,8 @@ void onSnepClientReady()
 	framework_UnlockMutex(g_SnepClientLock);
 }
 
+
+/*NXP Function*/
 void onSnepClientClosed()
 {
 	framework_LockMutex(g_devLock);
@@ -442,6 +461,8 @@ void onSnepClientClosed()
 	framework_UnlockMutex(g_SnepClientLock);
 }
  
+
+/*NXP Function*/
 int InitMode(int tag, int p2p, int hce)
 {
 	int res = 0x00;
@@ -508,6 +529,8 @@ int InitMode(int tag, int p2p, int hce)
 	return res;
 }
 
+
+/*NXP Function*/
 int DeinitPollMode()
 {
 	int res = 0x00;
@@ -531,6 +554,8 @@ int DeinitPollMode()
 	return res;
 }
 
+
+/*NXP Function*/
 int WriteTag(nfc_tag_info_t TagInfo, unsigned char* msgToPush, unsigned int len)
 {
 	int res = 0x00;
@@ -549,6 +574,8 @@ int WriteTag(nfc_tag_info_t TagInfo, unsigned char* msgToPush, unsigned int len)
 }
 
 
+
+/*NXP Function*/
 void PrintfNDEFInfo(ndef_info_t pNDEFinfo)
 {
 	if(0x01 == pNDEFinfo.is_ndef)
@@ -748,7 +775,7 @@ void writeMessage(char* resp, nfc_tag_info_t TagInfo, unsigned char* NDEFMsg, un
 	char  arg0[] = "--type=Text";
     char  arg1[] = "-l";
     char  arg2[] = "en";
-    char arg3[] = "-r";
+    char  arg3[] = "-r";
     char* arg4 = resp;
     char* argv[] = { &arg0[0], &arg1[0], &arg2[0], &arg3[0], &arg4[0], NULL };
     int   argc   = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
@@ -805,7 +832,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	unsigned char * NDEFMsg = NULL;
 	unsigned int NDEFMsgLen = 0x00;
 
-	//TODO: check DB/cache? for cid
+	//(Bus Mode) check if CID is in cache
 	if (kiosk == 0)
 	{
 		char cidstrsmall[BUFSIZE];
@@ -845,14 +872,12 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 		}
 	}
-	else
+	else //(Kiosk mode) ignore CID check as UI manages it
 	{
 		cidfound = 1;
-	}
-	
-	
+	}	
     
-    
+    //check for active card with valid CID
 	if ((dev == '0') && (valid == '1') && (cidfound))
 	{
 		//if time difference is more than 1 hr 15 (4500s), charge balance and write new time stamp
@@ -862,7 +887,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		{
 			diffTime = comparePLTime(p->timestamp);
 			printf("Time diff (s) %f\n", diffTime);
-			if (diffTime > 4500 || TRANSFERSOFF)
+			if (diffTime > TRANSFERSEC || TRANSFERSOFF)
 			{
 				printf("Transfer expired, charging card and setting new timestamp...\n");
 				//generate current time string
@@ -879,7 +904,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 				float f = p->balance;
 				sprintf(balance, "%X", *((int*)&f));
 
-				if (p->balance < 0)
+				if (p->balance < 0) //allow one transaction to bring a user into negative balance
 				{
 					printf("Invalid: not enough balance for transaction.\n");
 					enoughBalance = 0;
@@ -904,7 +929,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 
 
 			}
-			else
+			else //transfer within transfer time so don't charge
 			{
 				printf("Transfer still valid, not charging card, not changing timestamp...\n");
 				delta = 0; //create balance update of 0;
@@ -912,21 +937,19 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 			}
 			if (enoughBalance)
 			{
+				//send balance update message to database
 				printf("Updating database..");
 
 				char msgBuf[BUFSIZE];
-				int port = DBPORT;
-				char hostname[] = HOSTNAME;
-
 				char* msgParam = malloc(BUFSIZE);
 				strcpy(msgBuf, createBalanceUpdate(p->cid, delta, msgParam));
 				
 				if (MESSAGESON)
 				{
 					int sendQ = 1;
-					if(sendMessageToServer(hostname, port, msgBuf)<1)
+					if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
 					{
-						//no connection to DB, so update cache and queue update reqs
+						//no connection to DB, so update cache and queue update requests
 						sendQ = 0;
 						printf("No connection to database\n");
 						char* balQ = malloc(BUFSIZE);
@@ -965,7 +988,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 					    {
 					        node* qq = dequeue(&DBREQS);
 					        printf("Queued message: %s\nMessages left: %d\n", (char*)qq->data, DBREQS.size);
-					        sendMessageToServer(hostname, port, qq->data);
+					        sendMessageToServer(HOSTNAME, DBPORT, qq->data);
 					        free(qq->data);
 					        free(qq);
 					    }
@@ -981,7 +1004,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 		}
 		else
 		{
-			//adding balance
+			//(Kiosk Mode) adding balance 
 			printf("Adding balance to card...\n");
 
 			printf("Change in balance: %f\n", delta);
@@ -1015,7 +1038,7 @@ void transaction(char* pl, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo, float d
 	free(p);
 }
 
-/*Added function. Init card with cid and balance, timestamp set to 1970*/
+/*Added function. Kiosk mode command. Init card with cid and balance, timestamp set to 1970*/
 void initcard(char* cid, char* balance, nfc_tag_info_t TagInfo, ndef_info_t NDEFinfo)
 {
 
@@ -1063,21 +1086,17 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	char argb[BUFSIZE]; //second param (init card balance)
 	int serverfd = -1;
 	int clientfd = -1;
-	int port = GUIPORT; //TODO: clean these names
 	int connected = 0;
 	char message[BUFSIZE];
 	
-
 	if (MESSAGESON && REQTIME)
 	{
 		//sync system time with DB time
 		printf("Updating time from database...\n");
 		char msgBuf[BUFSIZE];
-		int port = DBPORT;
-		char hostname[] = HOSTNAME;
 		char* msgParam = malloc(BUFSIZE);
 		strcpy(msgBuf, createGetTime(msgBuf));
-		if(sendMessageToServer(hostname, port, msgBuf)<1)
+		if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
 		{
 			printf("No connection to database\n");
 		}
@@ -1106,7 +1125,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	if (0x06 == mode)
 	{
 		//initialize server
-		serverfd = initServer(serverfd, port);
+		serverfd = initServer(serverfd, GUIPORT);
 	}
 
 	do
@@ -1126,7 +1145,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			      clientfd = acceptClient(clientfd, serverfd, message);
 			      connected = 1;
 			    }
-			    
+
+			    // blocks while waiting for GUI
 			    printf("Reading from client...\n");
 			    bzero(message, BUFSIZE);
 			    n = read(clientfd, message, BUFSIZE);
@@ -1135,9 +1155,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 			      connected = 0;
 			      printf("Disconnected from client.\n");
 			    }
-			    printf("Server received %d bytes: %s \n", n, message);
+			    printf("Received %d bytes: %s \n", n, message);
 
-				// blocks while waiting for GUI
 
 			    if (connected)
 			    {
@@ -1154,7 +1173,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					}
 					else
 					{
-						//sleep(3);
 						printf("Resuming...\n");
 						kioskWait = 0;
 					}
@@ -1181,6 +1199,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 		
 		else if(eDevState_PRESENT != g_DevState)
 		{
+			//blocks until card/HCE app detected
 			printf("Waiting for a Tag/Device...\n\n");
 			g_DevState = eDevState_WAIT_ARRIVAL;
 			framework_WaitMutex(g_devLock, 0);
@@ -1304,16 +1323,23 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						//BUS SCANNER MODE
 
 						char* pl = getPayload(&TagInfo, &NDEFinfo, NULL, 0x00);
+						if (NDEFinfo.current_ndef_length == PL_LEN + 7)
+						{
+							encrypt(pl, KEY, PL_LEN);
 
-						encrypt(pl, KEY, PL_LEN);
+							printf("Decrypted: %s\n", pl);
 
-						printf("Decrypted: %s\n", pl);
-
-						transaction(pl, TagInfo, NDEFinfo, FEE, 0);
-						// for(k = 0; k<2; k++)
-						// {
-						// 	digitalWrite(28, HIGH);delay(500);
-						// }
+							transaction(pl, TagInfo, NDEFinfo, FEE, 0);
+							// for(k = 0; k<2; k++)
+							// {
+							// 	digitalWrite(28, HIGH);delay(500);
+							// }
+						}
+						else
+						{
+							printf("Error: Invalid card\n");
+						}
+						
 
 
 					}
@@ -1579,8 +1605,6 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 					{
 						//Get LastUpdated from DB to see if transfer valid
 						char msgBuf[BUFSIZE];
-						int port = DBPORT;
-						char hostname[] = HOSTNAME;
 						int cidint;
 	    				hexStrToInt(cidstr, &cidint);
 						char* msgParam = malloc(BUFSIZE);
@@ -1589,7 +1613,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						{	
 							char tsbuf[BUFSIZE];
 							printf("Getting timestamp from database...\n");
-							if(sendMessageToServer(hostname, port, msgBuf)<1)
+							if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
 							{
 								printf("No connection to database\n");
 								//if no connection use cache timestamp
@@ -1628,7 +1652,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 						float delta = FEE;
 						diffTime = comparePLTime(timestamp);
 						printf("Time diff (s) %f\n", diffTime);
-						if (diffTime > 4500 || TRANSFERSOFF)
+						if (diffTime > TRANSFERSEC || TRANSFERSOFF)
 						{
 							printf("Transfer expired, charging phone and setting new timestamp...\n");
 							//get balance from cache, see if enough credit on account
@@ -1664,7 +1688,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 							if (MESSAGESON)
 							{
 								int sendQ = 1;
-								if(sendMessageToServer(hostname, port, msgBuf)<1)
+								if(sendMessageToServer(HOSTNAME, DBPORT, msgBuf)<1)
 								{
 									sendQ = 0;
 									printf("No connection to database\n");
@@ -1701,7 +1725,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								}
 								else if (CACHING)
 								{
-									getFullCache(HOSTNAME, port);	
+									getFullCache(HOSTNAME, DBPORT);	
 								}
 								if (sendQ)
 								{
@@ -1710,7 +1734,7 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 								    {
 								        node* qq = dequeue(&DBREQS);
 								        printf("Queued message: %s\nMessages left: %d\n", (char*)qq->data, DBREQS.size);
-								        sendMessageToServer(hostname, port, qq->data);
+								        sendMessageToServer(HOSTNAME, DBPORT, qq->data);
 								        free(qq->data);
 								        free(qq);
 								    }
@@ -1778,6 +1802,8 @@ int WaitDeviceArrival(int mode, unsigned char* msgToSend, unsigned int len)
 	return res;
 }
 
+
+/*NXP Function*/
 void strtolower(char * string) 
 {
     unsigned int i = 0x00;
@@ -1788,6 +1814,8 @@ void strtolower(char * string)
     }
 }
 
+
+/*NXP Function*/
 char* strRemovceChar(const char* str, char car)
 {
 	unsigned int i = 0x00;
@@ -1805,6 +1833,7 @@ char* strRemovceChar(const char* str, char car)
 	return dest;
 }
 
+/*NXP Function*/
 int convertParamtoBuffer(char* param, unsigned char** outBuffer, unsigned int* outBufferLen)
 {
 	int res = 0x00;
@@ -1856,6 +1885,8 @@ int convertParamtoBuffer(char* param, unsigned char** outBuffer, unsigned int* o
 	return res;
 }
 
+
+/*NXP Function*/
 int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, unsigned int* outNDEFBufferLen)
 {
 	int res = 0x00;
@@ -2065,6 +2096,8 @@ int BuildNDEFMessage(int arg_len, char** arg, unsigned char** outNDEFBuffer, uns
 	return res;
 }
 
+
+/*NXP Function*/
 /*if data = NULL this tag is not followed by dataStr : for example -h --help
 if format = 0 tag format -t "text" if format=1 tag format : --type=text*/
 int LookForTag(char** args, int args_len, char* tag, char** data, int format)
@@ -2122,6 +2155,7 @@ int LookForTag(char** args, int args_len, char* tag, char** data, int format)
 }
  
 
+/*NXP Function*/
 void cmd_poll(int arg_len, char** arg)
 {
 	int res = 0x00;
@@ -2155,7 +2189,8 @@ void cmd_poll(int arg_len, char** arg)
 	printf("Leaving ...\n");
 }
 
- 
+
+/*NXP Function*/ 
 void cmd_push(int arg_len, char** arg)
 {
 	int res = 0x00;
@@ -2202,6 +2237,8 @@ void cmd_push(int arg_len, char** arg)
 	printf("Leaving ...\n");
 }
 
+
+/*NXP Function*/
 void cmd_write(int arg_len, char** arg)
 {
 	int res = 0x00;
@@ -2335,6 +2372,8 @@ void cmd_kiosk(int arg_len, char** arg)
 }
 
 
+/*NXP Function. Modified message to indicate Ctrl-C as the primary exit signal.
+getchar() (pressing enter) will also exit if not blocked on a socket*/
 void* ExitThread(void* pContext)
 {
 	printf("                              ... press Ctrl-C to quit ...\n\n");
@@ -2370,6 +2409,8 @@ void* ExitThread(void* pContext)
 	return NULL;
 }
 
+
+/*NXP Function*/
 int InitEnv()
 {
 	eResult tool_res = FRAMEWORK_SUCCESS;
@@ -2409,6 +2450,8 @@ int InitEnv()
 	return res;
 }
 
+
+/*NXP Function*/
 int CleanEnv()
 {
 	if(NULL != g_ThreadHandle)
@@ -2437,6 +2480,8 @@ int CleanEnv()
 	return 0x00;
 }
  
+
+/*Modified to include bus and kiosk modes, as well as signal and LED setup*/
  int main(int argc, char ** argv)
  {
  	//initialize LEDs
@@ -2487,6 +2532,7 @@ int CleanEnv()
  }
  
  
+/*NXP Function*/
 void help(int mode)
 {
 	printf("\nCOMMAND: \n");
